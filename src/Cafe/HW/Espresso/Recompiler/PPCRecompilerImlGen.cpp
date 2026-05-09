@@ -464,7 +464,7 @@ bool PPCRecompilerImlGen_MFSPR(ppcImlGenContext_t* ppcImlGenContext, uint32 opco
 	PPC_OPC_TEMPL_XO(opcode, rD, spr1, spr2);
 	spr = spr1 | (spr2<<5);
 	IMLReg gprReg = _GetRegGPR(ppcImlGenContext, rD);
-	if (spr == SPR_LR || spr == SPR_CTR)
+	if (spr == SPR_LR || spr == SPR_CTR || spr == SPR_UPIR)
 	{
 		IMLReg sprReg = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_SPR0 + spr);
 		ppcImlGenContext->emitInst().make_r_r(PPCREC_IML_OP_ASSIGN, gprReg, sprReg);
@@ -941,6 +941,22 @@ bool PPCRecompilerImlGen_SUBFZE(ppcImlGenContext_t* ppcImlGenContext, uint32 opc
 	IMLReg regCa = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_XER_CA);
 	ppcImlGenContext->emitInst().make_r_r(PPCREC_IML_OP_NOT, regTmp, regA);
 	ppcImlGenContext->emitInst().make_r_r_s32_carry(PPCREC_IML_OP_ADD_WITH_CARRY, regD, regTmp, 0, regCa);
+	if (opcode & PPC_OPC_RC)
+		PPCImlGen_UpdateCR0(ppcImlGenContext, regD);
+	return true;
+}
+
+bool PPCRecompilerImlGen_SUBFME(ppcImlGenContext_t* ppcImlGenContext, uint32 opcode)
+{
+	// d = ~a + -1 + ca;
+	sint32 rD, rA, rB;
+	PPC_OPC_TEMPL_XO(opcode, rD, rA, rB);
+	IMLReg regA = _GetRegGPR(ppcImlGenContext, rA);
+	IMLReg regD = _GetRegGPR(ppcImlGenContext, rD);
+	IMLReg regTmp = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_TEMPORARY + 0);
+	IMLReg regCa = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_XER_CA);
+	ppcImlGenContext->emitInst().make_r_r(PPCREC_IML_OP_NOT, regTmp, regA);
+	ppcImlGenContext->emitInst().make_r_r_s32_carry(PPCREC_IML_OP_ADD_WITH_CARRY, regD, regTmp, -1, regCa);
 	if (opcode & PPC_OPC_RC)
 		PPCImlGen_UpdateCR0(ppcImlGenContext, regD);
 	return true;
@@ -1975,6 +1991,16 @@ bool PPCRecompiler_decodePPCInstruction(ppcImlGenContext_t* ppcImlGenContext)
 				break;
 			}
 			break;
+		case 6:
+			if (PPCRecompilerImlGen_PSQ_LX(ppcImlGenContext, opcode) == false)
+				unsupportedInstructionFound = true;
+			ppcImlGenContext->hasFPUInstruction = true;
+			break;
+		case 7:
+			if (PPCRecompilerImlGen_PSQ_STX(ppcImlGenContext, opcode) == false)
+				unsupportedInstructionFound = true;
+			ppcImlGenContext->hasFPUInstruction = true;
+			break;
 		case 8: //Sub category - move/negate
 			switch (PPC_getBits(opcode, 25, 5))
 			{
@@ -1985,6 +2011,11 @@ bool PPCRecompiler_decodePPCInstruction(ppcImlGenContext_t* ppcImlGenContext)
 				break;
 			case 2: // PS move register
 				if (PPCRecompilerImlGen_PS_MR(ppcImlGenContext, opcode) == false)
+					unsupportedInstructionFound = true;
+				ppcImlGenContext->hasFPUInstruction = true;
+				break;
+			case 4: // PS negative absolute
+				if (PPCRecompilerImlGen_PS_NABS(ppcImlGenContext, opcode) == false)
 					unsupportedInstructionFound = true;
 				ppcImlGenContext->hasFPUInstruction = true;
 				break;
@@ -2070,6 +2101,9 @@ bool PPCRecompiler_decodePPCInstruction(ppcImlGenContext_t* ppcImlGenContext)
 			if (PPCRecompilerImlGen_PS_ADD(ppcImlGenContext, opcode) == false)
 				unsupportedInstructionFound = true;
 			ppcImlGenContext->hasFPUInstruction = true;
+			break;
+		case 22:
+			// DCBZL is an undocumented cache instruction and the interpreter treats it as a no-op.
 			break;
 		case 23: // select paired
 			if (PPCRecompilerImlGen_PS_SEL(ppcImlGenContext, opcode) == false)
@@ -2358,6 +2392,10 @@ bool PPCRecompiler_decodePPCInstruction(ppcImlGenContext_t* ppcImlGenContext)
 			break;
 		case 215: // STBX
 			if (!PPCRecompilerImlGen_STORE_INDEXED(ppcImlGenContext, opcode, 8, true, false))
+				unsupportedInstructionFound = true;
+			break;
+		case 232:
+			if (PPCRecompilerImlGen_SUBFME(ppcImlGenContext, opcode) == false)
 				unsupportedInstructionFound = true;
 			break;
 		case 234:
@@ -2973,7 +3011,13 @@ bool PPCIMLGen_FillBasicBlock(ppcImlGenContext_t& ppcImlGenContext, PPCBasicBloc
 
 		if (PPCRecompiler_decodePPCInstruction(&ppcImlGenContext))
 		{
-			cemuLog_logDebug(LogType::Force, "PPCRecompiler: Unsupported instruction at 0x{:08x}", addressOfCurrentInstruction);
+			uint32 opcode = PPCRecompiler_getPreviousInstruction(&ppcImlGenContext);
+			cemuLog_logDebug(LogType::Force, "PPCRecompiler: Unsupported instruction at 0x{:08x} opcode=0x{:08x} primary={} xo5={} xo10={}",
+							 addressOfCurrentInstruction,
+							 opcode,
+							 opcode >> 26,
+							 PPC_getBits(opcode, 30, 5),
+							 PPC_getBits(opcode, 30, 10));
 			ppcImlGenContext.currentOutputSegment = nullptr;
 			return false;
 		}

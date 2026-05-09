@@ -875,6 +875,68 @@ bool PPCRecompilerImlGen_PSQ_L(ppcImlGenContext_t* ppcImlGenContext, uint32 opco
 	return true;
 }
 
+bool PPCRecompilerImlGen_PSQ_LX(ppcImlGenContext_t* ppcImlGenContext, uint32 opcode)
+{
+	sint32 rA, frD, rB;
+	PPC_OPC_TEMPL_X(opcode, frD, rA, rB);
+	sint32 gqrIndex = (opcode >> 7) & 7;
+	bool readPS1 = (opcode & (1 << 10)) == 0;
+
+	IMLReg gprB = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_R0 + rB);
+	IMLReg gprEA = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_TEMPORARY + 3);
+	if (rA != 0)
+	{
+		IMLReg gprA = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_R0 + rA);
+		ppcImlGenContext->emitInst().make_r_r_r(PPCREC_IML_OP_ADD, gprEA, gprA, gprB);
+	}
+	else
+	{
+		ppcImlGenContext->emitInst().make_r_r(PPCREC_IML_OP_ASSIGN, gprEA, gprB);
+	}
+
+	DefinePS0(fprDPS0, frD);
+	DefinePS1(fprDPS1, frD);
+	if (!readPS1)
+	{
+		ppcImlGenContext->emitInst().make_fpr_r(PPCREC_IML_OP_FPR_LOAD_ONE, fprDPS1);
+	}
+
+	uint32 knownGQRValue = 0;
+	if (!PPCRecompiler_isUGQRValueKnown(ppcImlGenContext, gqrIndex, knownGQRValue))
+	{
+		IMLReg gqrRegister = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_SPR0 + SPR_UGQR0 + gqrIndex);
+		IMLReg loadTypeReg = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_TEMPORARY + 0);
+		ppcImlGenContext->emitInst().make_r_r_s32(PPCREC_IML_OP_RIGHT_SHIFT_U, loadTypeReg, gqrRegister, 16);
+		ppcImlGenContext->emitInst().make_r_r_s32(PPCREC_IML_OP_AND, loadTypeReg, loadTypeReg, 0x7);
+		IMLSegment* caseSegment[5];
+		sint32 compareValues[5] = {0, 4, 5, 6, 7};
+		PPCIMLGen_CreateSegmentBranchedPathMultiple(*ppcImlGenContext, *ppcImlGenContext->currentBasicBlock, caseSegment, loadTypeReg, compareValues, 5, 0);
+		for (sint32 i = 0; i < 5; i++)
+		{
+			IMLRedirectInstOutput outputToCase(ppcImlGenContext, caseSegment[i]);
+			PPCRecompilerImlGen_EmitPSQLoadCase(ppcImlGenContext, gqrIndex, static_cast<Espresso::PSQ_LOAD_TYPE>(compareValues[i]), readPS1, gprEA, 0, fprDPS0, fprDPS1);
+			caseSegment[i]->AppendInstruction()->make_jump();
+		}
+		return true;
+	}
+
+	Espresso::PSQ_LOAD_TYPE type = static_cast<Espresso::PSQ_LOAD_TYPE>((knownGQRValue >> 16) & 0x7);
+	sint32 scale = (knownGQRValue >> 24) & 0x3F;
+	cemu_assert_debug(scale == 0);
+	if (scale != 0)
+		return false;
+
+	if (type == Espresso::PSQ_LOAD_TYPE::TYPE_UNUSED1 ||
+		type == Espresso::PSQ_LOAD_TYPE::TYPE_UNUSED2 ||
+		type == Espresso::PSQ_LOAD_TYPE::TYPE_UNUSED3)
+	{
+		return false;
+	}
+
+	PPCRecompilerImlGen_EmitPSQLoadCase(ppcImlGenContext, gqrIndex, type, readPS1, gprEA, 0, fprDPS0, fprDPS1);
+	return true;
+}
+
 void PPCRecompilerImlGen_EmitPSQStoreCase(ppcImlGenContext_t* ppcImlGenContext, sint32 gqrIndex, Espresso::PSQ_LOAD_TYPE storeType, bool storePS1, IMLReg gprA, sint32 imm, IMLReg fprDPS0, IMLReg fprDPS1)
 {
 	cemu_assert_debug(!storePS1 || fprDPS1.IsValid());
@@ -1001,6 +1063,62 @@ bool PPCRecompilerImlGen_PSQ_ST(ppcImlGenContext_t* ppcImlGenContext, uint32 opc
 	}
 
 	PPCRecompilerImlGen_EmitPSQStoreCase(ppcImlGenContext, gqrIndex, type, storePS1, gprA, imm, fprDPS0, fprDPS1);
+	return true;
+}
+
+bool PPCRecompilerImlGen_PSQ_STX(ppcImlGenContext_t* ppcImlGenContext, uint32 opcode)
+{
+	sint32 rA, frD, rB;
+	PPC_OPC_TEMPL_X(opcode, frD, rA, rB);
+	sint32 gqrIndex = (opcode >> 7) & 7;
+	bool storePS1 = (opcode & (1 << 10)) == 0;
+
+	IMLReg gprB = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_R0 + rB);
+	IMLReg gprEA = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_TEMPORARY + 3);
+	if (rA != 0)
+	{
+		IMLReg gprA = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_R0 + rA);
+		ppcImlGenContext->emitInst().make_r_r_r(PPCREC_IML_OP_ADD, gprEA, gprA, gprB);
+	}
+	else
+	{
+		ppcImlGenContext->emitInst().make_r_r(PPCREC_IML_OP_ASSIGN, gprEA, gprB);
+	}
+
+	DefinePS0(fprDPS0, frD);
+	IMLReg fprDPS1 = storePS1 ? _GetFPRRegPS1(ppcImlGenContext, frD) : IMLREG_INVALID;
+
+	uint32 gqrValue = 0;
+	if (!PPCRecompiler_isUGQRValueKnown(ppcImlGenContext, gqrIndex, gqrValue))
+	{
+		IMLReg gqrRegister = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_SPR0 + SPR_UGQR0 + gqrIndex);
+		IMLReg loadTypeReg = PPCRecompilerImlGen_loadRegister(ppcImlGenContext, PPCREC_NAME_TEMPORARY + 0);
+		ppcImlGenContext->emitInst().make_r_r_s32(PPCREC_IML_OP_AND, loadTypeReg, gqrRegister, 0x7);
+
+		IMLSegment* caseSegment[5];
+		sint32 compareValues[5] = {0, 4, 5, 6, 7};
+		PPCIMLGen_CreateSegmentBranchedPathMultiple(*ppcImlGenContext, *ppcImlGenContext->currentBasicBlock, caseSegment, loadTypeReg, compareValues, 5, 0);
+		for (sint32 i = 0; i < 5; i++)
+		{
+			IMLRedirectInstOutput outputToCase(ppcImlGenContext, caseSegment[i]);
+			PPCRecompilerImlGen_EmitPSQStoreCase(ppcImlGenContext, gqrIndex, static_cast<Espresso::PSQ_LOAD_TYPE>(compareValues[i]), storePS1, gprEA, 0, fprDPS0, fprDPS1);
+			ppcImlGenContext->emitInst().make_jump();
+		}
+		return true;
+	}
+
+	Espresso::PSQ_LOAD_TYPE type = static_cast<Espresso::PSQ_LOAD_TYPE>((gqrValue >> 0) & 0x7);
+	sint32 scale = (gqrValue >> 24) & 0x3F;
+	cemu_assert_debug(scale == 0);
+
+	if (type == Espresso::PSQ_LOAD_TYPE::TYPE_UNUSED1 ||
+		type == Espresso::PSQ_LOAD_TYPE::TYPE_UNUSED2 ||
+		type == Espresso::PSQ_LOAD_TYPE::TYPE_UNUSED3)
+	{
+		return false;
+	}
+
+	PPCRecompilerImlGen_EmitPSQStoreCase(ppcImlGenContext, gqrIndex, type, storePS1, gprEA, 0, fprDPS0, fprDPS1);
 	return true;
 }
 
@@ -1521,6 +1639,25 @@ bool PPCRecompilerImlGen_PS_ABS(ppcImlGenContext_t* ppcImlGenContext, uint32 opc
 
 	ppcImlGenContext->emitInst().make_fpr_r(PPCREC_IML_OP_FPR_ABS, fprDps0);
 	ppcImlGenContext->emitInst().make_fpr_r(PPCREC_IML_OP_FPR_ABS, fprDps1);
+	return true;
+}
+
+bool PPCRecompilerImlGen_PS_NABS(ppcImlGenContext_t* ppcImlGenContext, uint32 opcode)
+{
+	sint32 frD, frB;
+	frB = (opcode >> 11) & 0x1F;
+	frD = (opcode >> 21) & 0x1F;
+
+	DefinePS0(fprBps0, frB);
+	DefinePS1(fprBps1, frB);
+	DefinePS0(fprDps0, frD);
+	DefinePS1(fprDps1, frD);
+
+	ppcImlGenContext->emitInst().make_fpr_r_r(PPCREC_IML_OP_FPR_ASSIGN, fprDps0, fprBps0);
+	ppcImlGenContext->emitInst().make_fpr_r_r(PPCREC_IML_OP_FPR_ASSIGN, fprDps1, fprBps1);
+
+	ppcImlGenContext->emitInst().make_fpr_r(PPCREC_IML_OP_FPR_NEGATIVE_ABS, fprDps0);
+	ppcImlGenContext->emitInst().make_fpr_r(PPCREC_IML_OP_FPR_NEGATIVE_ABS, fprDps1);
 	return true;
 }
 

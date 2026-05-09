@@ -76,6 +76,12 @@ The Android Back key is intentionally mapped to the same in-game menu toggle as 
 
 When smoke-testing dual screen, `dumpsys window windows` should show a `info.cemu.cemu_thor.debug` window on `mDisplayId=4` while `EmulationActivity` is on `displayId=0`.
 
+## Star Fox Zero Recompiler Smoke Test
+
+Star Fox Zero USA (`00050000101b0400`) is a useful Android ARM64 recompiler stress test. The launch path tested on the Thor was `/storage/2664-21DE/Roms/wiiu/Star Fox Zero (USA) (En,Fr,Es).wux`.
+
+If the game is slow or exits cleanly with status 1, check `/sdcard/Android/data/info.cemu.cemu_thor.debug/files/log.txt` for `PPCRecompiler: Unsupported instruction`. Known ARM64 gaps fixed in this fork include indexed paired-single load/store (`psq_lx`/`psq_stx`), `ps_nabs`, `dcbzl`, `mfspr SPR_UPIR`, and `subfme`. A healthy startup smoke test should keep the process alive and show zero unsupported recompiler instructions after launch.
+
 ## Existing Cemu Data Copy
 
 The original Android Cemu package on the test Thor was `info.cemu.cemu`. To copy its external files into the debug Thor package:

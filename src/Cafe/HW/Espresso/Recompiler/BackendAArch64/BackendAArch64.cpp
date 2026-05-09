@@ -372,6 +372,7 @@ static_assert(isAdrImmRangeValidGPR(offsetof(PPCInterpreter_t, gpr), sizeof(uint
 static_assert(isAdrImmValidGPR(offsetof(PPCInterpreter_t, spr.LR)));
 static_assert(isAdrImmValidGPR(offsetof(PPCInterpreter_t, spr.CTR)));
 static_assert(isAdrImmValidGPR(offsetof(PPCInterpreter_t, spr.XER)));
+static_assert(isAdrImmValidGPR(offsetof(PPCInterpreter_t, spr.UPIR)));
 static_assert(isAdrImmRangeValidGPR(offsetof(PPCInterpreter_t, spr.UGQR), sizeof(PPCInterpreter_t::spr.UGQR[0]) * (SPR_UGQR7 - SPR_UGQR0)));
 static_assert(isAdrImmRangeValidGPR(offsetof(PPCInterpreter_t, temporaryGPR_reg), sizeof(uint32) * 3));
 static_assert(isAdrImmValidGPR(offsetof(PPCInterpreter_t, xer_ca), 8));
@@ -394,7 +395,7 @@ void AArch64GenContext_t::r_name(IMLInstruction* imlInstruction)
 		{
 			ldr(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, gpr) + sizeof(uint32) * (name - PPCREC_NAME_R0)));
 		}
-		else if (name >= PPCREC_NAME_SPR0 && name < PPCREC_NAME_SPR0 + 999)
+		else if (name >= PPCREC_NAME_SPR0 && name < PPCREC_NAME_SPR0 + 1024)
 		{
 			uint32 sprIndex = (name - PPCREC_NAME_SPR0);
 			if (sprIndex == SPR_LR)
@@ -403,6 +404,8 @@ void AArch64GenContext_t::r_name(IMLInstruction* imlInstruction)
 				ldr(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.CTR)));
 			else if (sprIndex == SPR_XER)
 				ldr(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.XER)));
+			else if (sprIndex == SPR_UPIR)
+				ldr(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.UPIR)));
 			else if (sprIndex >= SPR_UGQR0 && sprIndex <= SPR_UGQR7)
 				ldr(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.UGQR) + sizeof(PPCInterpreter_t::spr.UGQR[0]) * (sprIndex - SPR_UGQR0)));
 			else
@@ -475,7 +478,7 @@ void AArch64GenContext_t::name_r(IMLInstruction* imlInstruction)
 		{
 			str(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, gpr) + sizeof(uint32) * (name - PPCREC_NAME_R0)));
 		}
-		else if (name >= PPCREC_NAME_SPR0 && name < PPCREC_NAME_SPR0 + 999)
+		else if (name >= PPCREC_NAME_SPR0 && name < PPCREC_NAME_SPR0 + 1024)
 		{
 			uint32 sprIndex = (name - PPCREC_NAME_SPR0);
 			if (sprIndex == SPR_LR)
@@ -484,6 +487,8 @@ void AArch64GenContext_t::name_r(IMLInstruction* imlInstruction)
 				str(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.CTR)));
 			else if (sprIndex == SPR_XER)
 				str(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.XER)));
+			else if (sprIndex == SPR_UPIR)
+				str(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.UPIR)));
 			else if (sprIndex >= SPR_UGQR0 && sprIndex <= SPR_UGQR7)
 				str(regR, AdrUimm(HCPU_REG, offsetof(PPCInterpreter_t, spr.UGQR) + sizeof(PPCInterpreter_t::spr.UGQR[0]) * (sprIndex - SPR_UGQR0)));
 			else
