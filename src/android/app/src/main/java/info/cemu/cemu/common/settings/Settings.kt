@@ -14,6 +14,9 @@ import java.io.OutputStream
 @Serializable
 data class EmulationSettings(
     val gamePadPosition: GamePadPosition = GamePadPosition.RIGHT,
+    val isPadVisible: Boolean = true,
+    val isPadOnExternalDisplay: Boolean = true,
+    val isExternalScreenRotatedLeft: Boolean = false,
 )
 
 @Serializable

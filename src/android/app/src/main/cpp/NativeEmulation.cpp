@@ -1,6 +1,7 @@
 #include "AndroidFilesystemCallbacks.h"
 #include "AndroidInputHelpers.h"
 #include "Cafe/CafeSystem.h"
+#include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/HW/Latte/Core/LatteOverlay.h"
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h"
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.h"
@@ -225,6 +226,20 @@ Java_info_cemu_cemu_nativeinterface_NativeEmulation_setReplaceTVWithPadView([[ma
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_setSwapScreens([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean swapped)
+{
+	auto& windowInfo = WindowSystem::GetWindowInfo();
+	windowInfo.swap_screens = swapped;
+	LatteGPUState.isDRCPrimary = swapped;
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_setExternalScreenRotatedLeft([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean rotated)
+{
+	WindowSystem::GetWindowInfo().external_screen_rotated_left = rotated;
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeEmulation_initializeEmulation([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
 {
 	FilesystemAndroid::SetFilesystemCallbacks(std::make_shared<AndroidFilesystemCallbacks>());
@@ -261,8 +276,17 @@ Java_info_cemu_cemu_nativeinterface_NativeEmulation_setDPI([[maybe_unused]] JNIE
 extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeEmulation_clearPadSurface([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
 {
-	VulkanRenderer::GetInstance()->StopUsingPadAndWait();
-	WindowSystem::GetWindowInfo().pad_open = false;
+	auto renderer = VulkanRenderer::GetInstance();
+	if (renderer)
+		renderer->StopUsingPadAndWait();
+
+	auto& windowInfo = WindowSystem::GetWindowInfo();
+	windowInfo.pad_open = false;
+
+	auto oldSurface = windowInfo.canvas_pad.surface.exchange(nullptr);
+	if (oldSurface != nullptr)
+		ANativeWindow_release(static_cast<ANativeWindow*>(oldSurface));
+	windowInfo.canvas_pad.surface.notify_all();
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
