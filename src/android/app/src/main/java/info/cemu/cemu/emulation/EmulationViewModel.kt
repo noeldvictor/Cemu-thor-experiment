@@ -23,6 +23,7 @@ import info.cemu.cemu.common.settings.OverlayInputConfig
 import info.cemu.cemu.nativeinterface.NativeEmulation
 import info.cemu.cemu.nativeinterface.NativeEmulation.PrepareTitleResult
 import info.cemu.cemu.nativeinterface.NativeException
+import info.cemu.cemu.nativeinterface.NativeSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,7 @@ data class SideMenuState(
     val areScreensSwapped: Boolean = false,
     val isExternalScreenRotatedLeft: Boolean = false,
     val isInputOverlayVisible: Boolean = false,
+    val isFPSOverlayVisible: Boolean = false,
 )
 
 class ConditionFlags(
@@ -108,6 +110,7 @@ class EmulationViewModel(
                     isPadOnExternalDisplay = settings.emulationSettings.isPadOnExternalDisplay,
                     isExternalScreenRotatedLeft = settings.emulationSettings.isExternalScreenRotatedLeft,
                     isInputOverlayVisible = settings.inputOverlaySettings.isOverlayEnabled,
+                    isFPSOverlayVisible = isFPSOverlayVisible(),
                 )
             }
         }
@@ -145,6 +148,10 @@ class EmulationViewModel(
         val oldState = _sideMenuState.value
         _sideMenuState.value = sideMenuState
 
+        if (oldState.isFPSOverlayVisible != sideMenuState.isFPSOverlayVisible) {
+            setFPSOverlayVisible(sideMenuState.isFPSOverlayVisible)
+        }
+
         if (oldState.isPadVisible != sideMenuState.isPadVisible ||
             oldState.isPadOnExternalDisplay != sideMenuState.isPadOnExternalDisplay ||
             oldState.isExternalScreenRotatedLeft != sideMenuState.isExternalScreenRotatedLeft
@@ -162,6 +169,30 @@ class EmulationViewModel(
             }
         }
     }
+
+    private fun isFPSOverlayVisible() =
+        NativeSettings.getOverlayPosition() != NativeSettings.OverlayScreenPosition.DISABLED &&
+                NativeSettings.isOverlayFPSEnabled()
+
+    private fun setFPSOverlayVisible(enabled: Boolean) {
+        if (enabled && NativeSettings.getOverlayPosition() == NativeSettings.OverlayScreenPosition.DISABLED) {
+            NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.TOP_LEFT)
+        }
+
+        NativeSettings.setOverlayFPSEnabled(enabled)
+
+        if (!enabled && !hasOtherOverlayStatsEnabled()) {
+            NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.DISABLED)
+        }
+
+        NativeSettings.saveSettings()
+    }
+
+    private fun hasOtherOverlayStatsEnabled() =
+        NativeSettings.isOverlayDrawCallsPerFrameEnabled() ||
+                NativeSettings.isOverlayCPUUsageEnabled() ||
+                NativeSettings.isOverlayRAMUsageEnabled() ||
+                NativeSettings.isOverlayDebugEnabled()
 
     val gamePadPosition = dataStore.data.map { it.emulationSettings.gamePadPosition }
         .stateIn(

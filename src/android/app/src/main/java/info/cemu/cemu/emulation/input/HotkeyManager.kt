@@ -18,6 +18,10 @@ object HotkeyManager {
         this.hotkeyMappings = hotkeyMappings
     }
 
+    fun triggerAction(action: HotkeyAction) {
+        _actions.tryEmit(action)
+    }
+
     fun onKeyEvent(keyEvent: KeyEvent) {
         if (!keyEvent.isFromPhysicalController()) {
             return

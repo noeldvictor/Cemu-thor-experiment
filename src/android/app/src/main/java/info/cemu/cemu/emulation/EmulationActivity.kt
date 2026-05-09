@@ -17,6 +17,7 @@ import info.cemu.cemu.BuildConfig
 import info.cemu.cemu.common.android.display.DisplayUtils
 import info.cemu.cemu.common.android.inputevent.isFromPhysicalController
 import info.cemu.cemu.common.settings.AppSettingsStore
+import info.cemu.cemu.common.settings.HotkeyAction
 import info.cemu.cemu.common.ui.components.ActivityContent
 import info.cemu.cemu.common.ui.localization.TranslatableContent
 import info.cemu.cemu.emulation.input.ControllerCallbacks
@@ -80,6 +81,13 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+                HotkeyManager.triggerAction(HotkeyAction.TOGGLE_MENU)
+            }
+            return true
+        }
+
         HotkeyManager.onKeyEvent(event)
 
         if (processInputEvents && InputHandler.onKeyEvent(event)) {

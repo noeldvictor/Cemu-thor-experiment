@@ -355,6 +355,12 @@ private fun EmulationSideMenuContent(
     )
 
     CheckboxItem(
+        label = tr("Show FPS"),
+        checked = sideMenuState.isFPSOverlayVisible,
+        onCheckedChange = { updateState(sideMenuState.copy(isFPSOverlayVisible = it)) },
+    )
+
+    CheckboxItem(
         label = tr("Show input overlay"),
         checked = sideMenuState.isInputOverlayVisible,
         onCheckedChange = { updateState(sideMenuState.copy(isInputOverlayVisible = it)) },
