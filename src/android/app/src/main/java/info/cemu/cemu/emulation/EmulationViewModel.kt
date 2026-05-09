@@ -44,6 +44,9 @@ data class SideMenuState(
     val isExternalScreenRotatedLeft: Boolean = false,
     val isInputOverlayVisible: Boolean = false,
     val isFPSOverlayVisible: Boolean = false,
+    val isAsyncShaderCompileEnabled: Boolean = true,
+    val skipGX2DrawDoneSync: Boolean = false,
+    val skipAccurateBarriers: Boolean = false,
 )
 
 class ConditionFlags(
@@ -81,6 +84,9 @@ class EmulationViewModel(
     private val launchPath: String,
     private val dataStore: DataStore<AppSettings> = AppSettingsStore.dataStore
 ) : ViewModel() {
+    private val savedGX2DrawDoneSync = NativeSettings.getGX2DrawDoneSync()
+    private val savedAccurateBarriers = NativeSettings.getAccurateBarriers()
+
     private val _emulationError = MutableStateFlow<NativeError?>(null)
     val emulationError = _emulationError.asStateFlow()
 
@@ -111,6 +117,9 @@ class EmulationViewModel(
                     isExternalScreenRotatedLeft = settings.emulationSettings.isExternalScreenRotatedLeft,
                     isInputOverlayVisible = settings.inputOverlaySettings.isOverlayEnabled,
                     isFPSOverlayVisible = isFPSOverlayVisible(),
+                    isAsyncShaderCompileEnabled = NativeSettings.getAsyncShaderCompile(),
+                    skipGX2DrawDoneSync = !savedGX2DrawDoneSync,
+                    skipAccurateBarriers = !savedAccurateBarriers,
                 )
             }
         }
@@ -152,6 +161,24 @@ class EmulationViewModel(
             setFPSOverlayVisible(sideMenuState.isFPSOverlayVisible)
         }
 
+        var shouldSaveSettings = false
+        if (oldState.isAsyncShaderCompileEnabled != sideMenuState.isAsyncShaderCompileEnabled) {
+            NativeSettings.setAsyncShaderCompile(sideMenuState.isAsyncShaderCompileEnabled)
+            shouldSaveSettings = true
+        }
+
+        if (oldState.skipGX2DrawDoneSync != sideMenuState.skipGX2DrawDoneSync) {
+            NativeSettings.setGX2DrawDoneSync(!sideMenuState.skipGX2DrawDoneSync)
+        }
+
+        if (oldState.skipAccurateBarriers != sideMenuState.skipAccurateBarriers) {
+            NativeSettings.setAccurateBarriers(!sideMenuState.skipAccurateBarriers)
+        }
+
+        if (shouldSaveSettings) {
+            saveSettingsPreservingSessionPerformanceOverrides()
+        }
+
         if (oldState.isPadVisible != sideMenuState.isPadVisible ||
             oldState.isPadOnExternalDisplay != sideMenuState.isPadOnExternalDisplay ||
             oldState.isExternalScreenRotatedLeft != sideMenuState.isExternalScreenRotatedLeft
@@ -189,7 +216,18 @@ class EmulationViewModel(
             NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.DISABLED)
         }
 
+        saveSettingsPreservingSessionPerformanceOverrides()
+    }
+
+    private fun saveSettingsPreservingSessionPerformanceOverrides() {
+        val currentGX2DrawDoneSync = NativeSettings.getGX2DrawDoneSync()
+        val currentAccurateBarriers = NativeSettings.getAccurateBarriers()
+
+        NativeSettings.setGX2DrawDoneSync(savedGX2DrawDoneSync)
+        NativeSettings.setAccurateBarriers(savedAccurateBarriers)
         NativeSettings.saveSettings()
+        NativeSettings.setGX2DrawDoneSync(currentGX2DrawDoneSync)
+        NativeSettings.setAccurateBarriers(currentAccurateBarriers)
     }
 
     private fun disableNonFPSOverlayStats() {

@@ -12,7 +12,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalDrawerSheet
@@ -161,7 +161,7 @@ fun EmulationScreen(
                 Column(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
-                        .width(IntrinsicSize.Max)
+                        .width(320.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     EmulationSideMenuContent(
@@ -170,7 +170,6 @@ fun EmulationScreen(
                             viewModel.updateSideMenuState(it)
                             setMotionSensorEnabled(it.isMotionEnabled)
                             NativeEmulation.setReplaceTVWithPadView(it.isTVReplacedWithPad)
-                            closeDrawer()
                         },
                         onEditInputOverlay = {
                             snackbarHostState.showMessage(scope, tr("Edit input positions"))
@@ -311,77 +310,142 @@ private fun EmulationSideMenuContent(
     onResetInputOverlay: () -> Unit,
     onQuit: () -> Unit,
 ) {
-    CheckboxItem(
-        label = tr("Enable motion"),
-        checked = sideMenuState.isMotionEnabled,
-        onCheckedChange = { updateState(sideMenuState.copy(isMotionEnabled = it)) },
-    )
+    MenuSection(title = tr("Display"), defaultExpanded = true) {
+        CheckboxItem(
+            label = tr("Show PAD"),
+            checked = sideMenuState.isPadVisible,
+            onCheckedChange = { updateState(sideMenuState.copy(isPadVisible = it)) },
+        )
 
-    CheckboxItem(
-        label = tr("Replace TV with PAD"),
-        checked = sideMenuState.isTVReplacedWithPad,
-        onCheckedChange = { updateState(sideMenuState.copy(isTVReplacedWithPad = it)) },
-    )
+        CheckboxItem(
+            label = tr("External PAD screen"),
+            checked = sideMenuState.isPadOnExternalDisplay,
+            onCheckedChange = { updateState(sideMenuState.copy(isPadOnExternalDisplay = it)) },
+            enabled = sideMenuState.isPadVisible,
+        )
 
-    CheckboxItem(
-        label = tr("Show PAD"),
-        checked = sideMenuState.isPadVisible,
-        onCheckedChange = { updateState(sideMenuState.copy(isPadVisible = it)) },
-    )
+        CheckboxItem(
+            label = tr("Swap screens"),
+            checked = sideMenuState.areScreensSwapped,
+            onCheckedChange = { updateState(sideMenuState.copy(areScreensSwapped = it)) },
+        )
 
-    CheckboxItem(
-        label = tr("External PAD screen"),
-        checked = sideMenuState.isPadOnExternalDisplay,
-        onCheckedChange = { updateState(sideMenuState.copy(isPadOnExternalDisplay = it)) },
-        enabled = sideMenuState.isPadVisible,
-    )
+        CheckboxItem(
+            label = tr("Replace TV with PAD"),
+            checked = sideMenuState.isTVReplacedWithPad,
+            onCheckedChange = { updateState(sideMenuState.copy(isTVReplacedWithPad = it)) },
+        )
 
-    CheckboxItem(
-        label = tr("Swap screens"),
-        checked = sideMenuState.areScreensSwapped,
-        onCheckedChange = { updateState(sideMenuState.copy(areScreensSwapped = it)) },
-    )
+        CheckboxItem(
+            label = tr("Rotate external screen left"),
+            checked = sideMenuState.isExternalScreenRotatedLeft,
+            onCheckedChange = { updateState(sideMenuState.copy(isExternalScreenRotatedLeft = it)) },
+            enabled = sideMenuState.isPadOnExternalDisplay,
+        )
+    }
 
-    CheckboxItem(
-        label = tr("Rotate external screen left"),
-        checked = sideMenuState.isExternalScreenRotatedLeft,
-        onCheckedChange = { updateState(sideMenuState.copy(isExternalScreenRotatedLeft = it)) },
-        enabled = sideMenuState.isPadOnExternalDisplay,
-    )
+    MenuSection(title = tr("Performance"), defaultExpanded = true) {
+        CheckboxItem(
+            label = tr("Show FPS"),
+            checked = sideMenuState.isFPSOverlayVisible,
+            onCheckedChange = { updateState(sideMenuState.copy(isFPSOverlayVisible = it)) },
+        )
 
-    TextButtonItem(
-        label = tr("Emulated USB Devices"),
-        onClick = onShowEmulatedUSBDevices,
-    )
+        CheckboxItem(
+            label = tr("Async shader compile"),
+            checked = sideMenuState.isAsyncShaderCompileEnabled,
+            onCheckedChange = { updateState(sideMenuState.copy(isAsyncShaderCompileEnabled = it)) },
+        )
 
-    CheckboxItem(
-        label = tr("Show FPS"),
-        checked = sideMenuState.isFPSOverlayVisible,
-        onCheckedChange = { updateState(sideMenuState.copy(isFPSOverlayVisible = it)) },
-    )
+        CheckboxItem(
+            label = tr("Skip GX2DrawDone sync (session)"),
+            checked = sideMenuState.skipGX2DrawDoneSync,
+            onCheckedChange = { updateState(sideMenuState.copy(skipGX2DrawDoneSync = it)) },
+        )
 
-    CheckboxItem(
-        label = tr("Show input overlay"),
-        checked = sideMenuState.isInputOverlayVisible,
-        onCheckedChange = { updateState(sideMenuState.copy(isInputOverlayVisible = it)) },
-    )
+        CheckboxItem(
+            label = tr("Skip accurate barriers (session)"),
+            checked = sideMenuState.skipAccurateBarriers,
+            onCheckedChange = { updateState(sideMenuState.copy(skipAccurateBarriers = it)) },
+        )
+    }
 
-    TextButtonItem(
-        label = tr("Edit inputs"),
-        enabled = sideMenuState.isInputOverlayVisible,
-        onClick = onEditInputOverlay,
-    )
+    MenuSection(title = tr("Controls"), defaultExpanded = sideMenuState.isInputOverlayVisible) {
+        CheckboxItem(
+            label = tr("Enable motion"),
+            checked = sideMenuState.isMotionEnabled,
+            onCheckedChange = { updateState(sideMenuState.copy(isMotionEnabled = it)) },
+        )
 
-    TextButtonItem(
-        label = tr("Reset input overlay"),
-        enabled = sideMenuState.isInputOverlayVisible,
-        onClick = onResetInputOverlay,
-    )
+        CheckboxItem(
+            label = tr("Show input overlay"),
+            checked = sideMenuState.isInputOverlayVisible,
+            onCheckedChange = { updateState(sideMenuState.copy(isInputOverlayVisible = it)) },
+        )
+
+        TextButtonItem(
+            label = tr("Edit inputs"),
+            enabled = sideMenuState.isInputOverlayVisible,
+            onClick = onEditInputOverlay,
+        )
+
+        TextButtonItem(
+            label = tr("Reset input overlay"),
+            enabled = sideMenuState.isInputOverlayVisible,
+            onClick = onResetInputOverlay,
+        )
+    }
+
+    MenuSection(title = tr("Tools"), defaultExpanded = false) {
+        TextButtonItem(
+            label = tr("Emulated USB Devices"),
+            onClick = onShowEmulatedUSBDevices,
+        )
+    }
 
     TextButtonItem(
         label = tr("Exit"),
         onClick = onQuit,
     )
+}
+
+@Composable
+private fun MenuSection(
+    title: String,
+    defaultExpanded: Boolean,
+    content: @Composable () -> Unit,
+) {
+    var expanded by rememberSaveable(title) { mutableStateOf(defaultExpanded) }
+
+    HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .minimumInteractiveComponentSize(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier
+                .padding(end = 8.dp)
+                .weight(1f),
+            fontSize = 14.sp,
+        )
+
+        Icon(
+            painter = painterResource(
+                id = if (expanded) R.drawable.ic_arrow_drop_down else R.drawable.ic_chevron_right
+            ),
+            contentDescription = null,
+        )
+    }
+
+    if (expanded) {
+        content()
+    }
 }
 
 @Composable

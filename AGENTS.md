@@ -60,6 +60,12 @@ The local named debug APK copy used during Thor testing is:
 C:\Users\leanerdesigner\Documents\Cemu_thor_build\src\android\app\build\outputs\apk\debug\cemu_thor-debug.apk
 ```
 
+Use release builds for performance testing. Debug builds can be dramatically slower on Star Fox Zero because native code is unoptimized and debug-only logs/assertions are active. The local named release APK copy used during Thor testing is:
+
+```sh
+C:\Users\leanerdesigner\Documents\Cemu_thor_build\src\android\app\build\outputs\apk\release\cemu_thor-release.apk
+```
+
 It is also useful to push a copy to the device:
 
 ```sh
@@ -73,6 +79,8 @@ The Thor has two Android displays. During testing, the top/main display appeared
 Keep the Sapphire dual-screen presentation work intact. The PAD screen should be able to render through `PadPresentation` on the external/presentation display, not merely as a second `SurfaceView` inside the main activity. The emulation side menu includes `External PAD screen`, `Swap screens`, and `Rotate external screen left`; PAD visible and external PAD default to enabled for this Thor-focused build.
 
 The Android Back key is intentionally mapped to the same in-game menu toggle as the hotkey action, and predictive back callbacks are enabled in the Android manifest. The emulation side menu also includes a `Show FPS` toggle; enabling it turns on Cemu's native overlay at the top-left corner when the overlay was previously disabled and clears non-FPS overlay stats so copied desktop settings do not unexpectedly show CPU/RAM/debug overlays during gameplay.
+
+The emulation side menu is grouped into expandable sections. `Performance` includes `Show FPS`, `Async shader compile`, and session-only risky speed toggles for skipping GX2DrawDone sync and accurate Vulkan barriers. Keep those risky toggles off by default; they may improve FPS in some scenes but can destabilize games and should not be silently persisted.
 
 When smoke-testing dual screen, `dumpsys window windows` should show a `info.cemu.cemu_thor.debug` window on `mDisplayId=4` while `EmulationActivity` is on `displayId=0`.
 

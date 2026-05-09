@@ -68,6 +68,12 @@ object NativeSettings {
     external fun setAccurateBarriers(value: Boolean)
 
     @JvmStatic
+    external fun getGX2DrawDoneSync(): Boolean
+
+    @JvmStatic
+    external fun setGX2DrawDoneSync(value: Boolean)
+
+    @JvmStatic
     external fun getAudioDeviceEnabled(tv: Boolean): Boolean
 
     @JvmStatic
