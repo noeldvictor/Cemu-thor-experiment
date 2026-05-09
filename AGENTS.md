@@ -72,7 +72,7 @@ The Thor has two Android displays. During testing, the top/main display appeared
 
 Keep the Sapphire dual-screen presentation work intact. The PAD screen should be able to render through `PadPresentation` on the external/presentation display, not merely as a second `SurfaceView` inside the main activity. The emulation side menu includes `External PAD screen`, `Swap screens`, and `Rotate external screen left`; PAD visible and external PAD default to enabled for this Thor-focused build.
 
-The Android Back key is intentionally mapped to the same in-game menu toggle as the hotkey action. The emulation side menu also includes a `Show FPS` toggle; enabling it turns on Cemu's native overlay at the top-left corner when the overlay was previously disabled.
+The Android Back key is intentionally mapped to the same in-game menu toggle as the hotkey action, and predictive back callbacks are enabled in the Android manifest. The emulation side menu also includes a `Show FPS` toggle; enabling it turns on Cemu's native overlay at the top-left corner when the overlay was previously disabled and clears non-FPS overlay stats so copied desktop settings do not unexpectedly show CPU/RAM/debug overlays during gameplay.
 
 When smoke-testing dual screen, `dumpsys window windows` should show a `info.cemu.cemu_thor.debug` window on `mDisplayId=4` while `EmulationActivity` is on `displayId=0`.
 

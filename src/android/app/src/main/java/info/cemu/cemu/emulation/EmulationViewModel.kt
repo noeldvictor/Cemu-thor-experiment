@@ -175,8 +175,12 @@ class EmulationViewModel(
                 NativeSettings.isOverlayFPSEnabled()
 
     private fun setFPSOverlayVisible(enabled: Boolean) {
-        if (enabled && NativeSettings.getOverlayPosition() == NativeSettings.OverlayScreenPosition.DISABLED) {
-            NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.TOP_LEFT)
+        if (enabled) {
+            disableNonFPSOverlayStats()
+
+            if (NativeSettings.getOverlayPosition() == NativeSettings.OverlayScreenPosition.DISABLED) {
+                NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.TOP_LEFT)
+            }
         }
 
         NativeSettings.setOverlayFPSEnabled(enabled)
@@ -188,10 +192,21 @@ class EmulationViewModel(
         NativeSettings.saveSettings()
     }
 
+    private fun disableNonFPSOverlayStats() {
+        NativeSettings.setOverlayDrawCallsPerFrameEnabled(false)
+        NativeSettings.setOverlayCPUUsageEnabled(false)
+        NativeSettings.setOverlayCPUPerCoreUsageEnabled(false)
+        NativeSettings.setOverlayRAMUsageEnabled(false)
+        NativeSettings.setOverlayVRAMUsageEnabled(false)
+        NativeSettings.setOverlayDebugEnabled(false)
+    }
+
     private fun hasOtherOverlayStatsEnabled() =
         NativeSettings.isOverlayDrawCallsPerFrameEnabled() ||
                 NativeSettings.isOverlayCPUUsageEnabled() ||
+                NativeSettings.isOverlayCPUPerCoreUsageEnabled() ||
                 NativeSettings.isOverlayRAMUsageEnabled() ||
+                NativeSettings.isOverlayVRAMUsageEnabled() ||
                 NativeSettings.isOverlayDebugEnabled()
 
     val gamePadPosition = dataStore.data.map { it.emulationSettings.gamePadPosition }

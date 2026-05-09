@@ -146,10 +146,22 @@ object NativeSettings {
     external fun setOverlayCPUUsageEnabled(value: Boolean)
 
     @JvmStatic
+    external fun isOverlayCPUPerCoreUsageEnabled(): Boolean
+
+    @JvmStatic
+    external fun setOverlayCPUPerCoreUsageEnabled(value: Boolean)
+
+    @JvmStatic
     external fun isOverlayRAMUsageEnabled(): Boolean
 
     @JvmStatic
     external fun setOverlayRAMUsageEnabled(value: Boolean)
+
+    @JvmStatic
+    external fun isOverlayVRAMUsageEnabled(): Boolean
+
+    @JvmStatic
+    external fun setOverlayVRAMUsageEnabled(value: Boolean)
 
     @JvmStatic
     external fun isOverlayDebugEnabled(): Boolean
