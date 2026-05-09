@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.InputStream
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.Path
@@ -47,6 +48,7 @@ enum class DriverInstallStatus {
 }
 
 enum class DriverInstallProgress {
+    FetchingDrivers,
     Downloading,
     Installing,
 }
@@ -110,6 +112,58 @@ class CustomDriversViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val download = TurnipDriverDownloader().downloadLatestTurnipDriver()
+                if (download == null) {
+                    onInstallFinished(DriverInstallStatus.ErrorDownloading)
+                    return@launch
+                }
+
+                _driverInstallProgress.value = DriverInstallProgress.Installing
+                val status = installDriverFromZip(
+                    openInputStream = { download.zipBytes.inputStream() },
+                    selectAfterInstall = true,
+                )
+                onInstallFinished(status)
+            } catch (exception: Exception) {
+                onInstallFinished(DriverInstallStatus.ErrorDownloading)
+            } finally {
+                _isDriverInstallInProgress.value = false
+            }
+        }
+    }
+
+    fun fetchAvailableTurnipDrivers(
+        onFinished: (List<TurnipDriverAsset>) -> Unit,
+        onError: () -> Unit,
+    ) {
+        _isDriverInstallInProgress.value = true
+        _driverInstallProgress.value = DriverInstallProgress.FetchingDrivers
+        viewModelScope.launch {
+            try {
+                val driverAssets = withContext(Dispatchers.IO) {
+                    TurnipDriverDownloader().fetchTurnipDriverAssets()
+                }
+
+                if (driverAssets.isEmpty())
+                    onError()
+                else
+                    onFinished(driverAssets)
+            } catch (exception: Exception) {
+                onError()
+            } finally {
+                _isDriverInstallInProgress.value = false
+            }
+        }
+    }
+
+    fun downloadAndUseTurnipDriver(
+        driverAsset: TurnipDriverAsset,
+        onInstallFinished: (DriverInstallStatus) -> Unit,
+    ) {
+        _isDriverInstallInProgress.value = true
+        _driverInstallProgress.value = DriverInstallProgress.Downloading
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val download = TurnipDriverDownloader().downloadTurnipDriver(driverAsset)
                 if (download == null) {
                     onInstallFinished(DriverInstallStatus.ErrorDownloading)
                     return@launch

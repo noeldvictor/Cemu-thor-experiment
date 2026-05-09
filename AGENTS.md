@@ -54,4 +54,4 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Custom Turnip Drivers
 
-The Android custom driver screen has an opt-in Turnip download action. It confirms with the user, then fetches a Turnip ZIP from `K11MCH1/AdrenoToolsDrivers`, installs it through the normal custom driver metadata validator, and selects it automatically.
+The Android custom driver screen has an opt-in Turnip download action. It can install the recommended Turnip package or list recent Turnip ZIP variants from `K11MCH1/AdrenoToolsDrivers` so a specific community-recommended build can be selected. Downloads install through the normal custom driver metadata validator and are selected automatically.

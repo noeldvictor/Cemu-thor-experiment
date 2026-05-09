@@ -15,18 +15,30 @@ data class TurnipDriverDownload(
     val zipBytes: ByteArray,
 )
 
+data class TurnipDriverAsset(
+    val fileName: String,
+    val releaseName: String,
+    val downloadUrl: String,
+    val isRecommended: Boolean,
+)
+
 class TurnipDriverDownloader(
     private val client: HttpClient = HttpClient(),
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun downloadLatestTurnipDriver(): TurnipDriverDownload? {
+        val candidate = fetchTurnipDriverAssets().firstOrNull() ?: return null
+        return downloadTurnipDriver(candidate)
+    }
+
+    suspend fun fetchTurnipDriverAssets(): List<TurnipDriverAsset> {
         val response = client.get(RELEASES_URL)
         if (!response.status.isSuccess())
-            return null
+            return emptyList()
 
         val releases = json.decodeFromString<List<GithubRelease>>(response.body<String>())
-        val candidate = releases
+        val candidates = releases
             .flatMapIndexed { releaseIndex, release ->
                 release.assets.map { GithubAssetCandidate(releaseIndex, release, it) }
             }
@@ -35,15 +47,26 @@ class TurnipDriverDownloader(
                 compareBy<GithubAssetCandidate> { it.releaseIndex }
                     .thenBy { turnipAssetScore(it.asset.name) }
             )
-            .firstOrNull() ?: return null
 
-        val downloadResponse = client.get(candidate.asset.browserDownloadUrl)
+        return candidates.map {
+            val releaseName = it.release.name ?: it.release.tagName
+            TurnipDriverAsset(
+                fileName = it.asset.name,
+                releaseName = releaseName,
+                downloadUrl = it.asset.browserDownloadUrl,
+                isRecommended = turnipAssetScore(it.asset.name) == 0,
+            )
+        }
+    }
+
+    suspend fun downloadTurnipDriver(driverAsset: TurnipDriverAsset): TurnipDriverDownload? {
+        val downloadResponse = client.get(driverAsset.downloadUrl)
         if (!downloadResponse.status.isSuccess())
             return null
 
         return TurnipDriverDownload(
-            fileName = candidate.asset.name,
-            releaseName = candidate.release.name ?: candidate.release.tagName,
+            fileName = driverAsset.fileName,
+            releaseName = driverAsset.releaseName,
             zipBytes = downloadResponse.bodyAsBytes(),
         )
     }

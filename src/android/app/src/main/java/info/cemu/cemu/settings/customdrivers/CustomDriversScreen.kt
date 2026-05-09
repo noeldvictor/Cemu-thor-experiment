@@ -4,13 +4,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -57,6 +60,8 @@ fun CustomDriversScreen(
     val isDriverInstallInProgress by customDriversViewModel.isDriverInstallInProgress.collectAsState()
     val driverInstallProgress by customDriversViewModel.driverInstallProgress.collectAsState()
     var showTurnipDownloadDialog by remember { mutableStateOf(false) }
+    var showTurnipPickerDialog by remember { mutableStateOf(false) }
+    var turnipDriverAssets by remember { mutableStateOf<List<TurnipDriverAsset>>(emptyList()) }
     val context = LocalContext.current
 
     val showImportInstallStatus: (DriverInstallStatus) -> Unit = { installStatus ->
@@ -133,18 +138,45 @@ fun CustomDriversScreen(
 
     if (showTurnipDownloadDialog) {
         TurnipDriverDownloadDialog(
-            onConfirm = {
+            onRecommended = {
                 showTurnipDownloadDialog = false
                 customDriversViewModel.downloadAndUseLatestTurnipDriver(showTurnipInstallStatus)
             },
+            onChoose = {
+                showTurnipDownloadDialog = false
+                customDriversViewModel.fetchAvailableTurnipDrivers(
+                    onFinished = {
+                        turnipDriverAssets = it
+                        showTurnipPickerDialog = true
+                    },
+                    onError = {
+                        coroutineScope.launch {
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(tr("Failed to load Turnip drivers"))
+                        }
+                    },
+                )
+            },
             onDismiss = { showTurnipDownloadDialog = false }
+        )
+    }
+
+    if (showTurnipPickerDialog) {
+        TurnipDriverPickerDialog(
+            driverAssets = turnipDriverAssets,
+            onSelect = {
+                showTurnipPickerDialog = false
+                customDriversViewModel.downloadAndUseTurnipDriver(it, showTurnipInstallStatus)
+            },
+            onDismiss = { showTurnipPickerDialog = false },
         )
     }
 }
 
 @Composable
 private fun TurnipDriverDownloadDialog(
-    onConfirm: () -> Unit,
+    onRecommended: () -> Unit,
+    onChoose: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -154,14 +186,19 @@ private fun TurnipDriverDownloadDialog(
         text = {
             Text(
                 tr(
-                    "Download a community Turnip Vulkan driver from K11MCH1/AdrenoToolsDrivers and select it for cemu_thor. Use only on compatible Adreno devices."
+                    "Download a community Turnip Vulkan driver from K11MCH1/AdrenoToolsDrivers and select it for cemu_thor. Pick a specific version if you are following a recommendation."
                 )
             )
         },
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(tr("Download"))
+            Row {
+                TextButton(onClick = onChoose) {
+                    Text(tr("Choose"))
+                }
+                TextButton(onClick = onRecommended) {
+                    Text(tr("Recommended"))
+                }
             }
         },
         dismissButton = {
@@ -173,8 +210,69 @@ private fun TurnipDriverDownloadDialog(
 }
 
 @Composable
+private fun TurnipDriverPickerDialog(
+    driverAssets: List<TurnipDriverAsset>,
+    onSelect: (TurnipDriverAsset) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        title = {
+            Text(tr("Choose Turnip driver"))
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+            ) {
+                items(driverAssets) {
+                    TurnipDriverAssetListItem(
+                        driverAsset = it,
+                        onSelect = { onSelect(it) },
+                    )
+                }
+            }
+        },
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(tr("Cancel"))
+            }
+        }
+    )
+}
+
+@Composable
+private fun TurnipDriverAssetListItem(
+    driverAsset: TurnipDriverAsset,
+    onSelect: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelect)
+            .padding(vertical = 10.dp)
+    ) {
+        Text(
+            text = driverAsset.fileName,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = if (driverAsset.isRecommended)
+                tr("{0} recommended", driverAsset.releaseName)
+            else
+                driverAsset.releaseName,
+            fontSize = 13.sp,
+        )
+    }
+}
+
+@Composable
 private fun DriverInstallProgressDialog(driverInstallProgress: DriverInstallProgress) {
     val progressText = when (driverInstallProgress) {
+        DriverInstallProgress.FetchingDrivers -> tr("Loading Turnip drivers")
         DriverInstallProgress.Downloading -> tr("Downloading Turnip driver")
         DriverInstallProgress.Installing -> tr("Installing driver in progress")
     }
