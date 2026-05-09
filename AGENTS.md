@@ -40,7 +40,9 @@ Useful commands from `src/android`:
 ./gradlew.bat :app:assembleRelease
 ```
 
-The app currently builds ARM64 only via `abiFilters("arm64-v8a")`. The Android application ID is `info.cemu.cemu_thor`; the Kotlin/JNI namespace remains `info.cemu.cemu` to avoid unnecessary native binding churn.
+The app currently builds ARM64 only via `abiFilters("arm64-v8a")`. The release Android application ID is `info.cemu.cemu_thor`; debug installs as `info.cemu.cemu_thor.debug`. The Kotlin/JNI namespace remains `info.cemu.cemu` to avoid unnecessary native binding churn.
+
+Android is Vulkan-only in this branch: `src/android/app/build.gradle.kts` passes `-DENABLE_OPENGL=OFF`, and `NativeEmulation.initializeRenderer()` creates a `VulkanRenderer`. If logs show `AdrenoVK` with `/vendor/lib64/hw/vulkan.adreno.so`, the app is using the system Qualcomm Vulkan driver rather than a custom Turnip driver.
 
 On Windows, prefer building from a path without spaces. A junction such as `C:\Users\leanerdesigner\Documents\Cemu_thor_build` pointing to the checkout works; vcpkg/autotools packages can fail when the physical build path contains spaces.
 
@@ -51,6 +53,37 @@ Use `adb devices` to confirm the AYN Thor is connected, then install the APK:
 ```sh
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+The local named debug APK copy used during Thor testing is:
+
+```sh
+C:\Users\leanerdesigner\Documents\Cemu_thor_build\src\android\app\build\outputs\apk\debug\cemu_thor-debug.apk
+```
+
+It is also useful to push a copy to the device:
+
+```sh
+adb push cemu_thor-debug.apk /sdcard/Download/cemu_thor-debug.apk
+```
+
+## AYN Thor Dual Screen
+
+The Thor has two Android displays. During testing, the top/main display appeared as `displayId=0`, and the lower/presentation screen appeared as `displayId=4` with `FLAG_PRESENTATION`.
+
+Keep the Sapphire dual-screen presentation work intact. The PAD screen should be able to render through `PadPresentation` on the external/presentation display, not merely as a second `SurfaceView` inside the main activity. The emulation side menu includes `External PAD screen`, `Swap screens`, and `Rotate external screen left`; PAD visible and external PAD default to enabled for this Thor-focused build.
+
+When smoke-testing dual screen, `dumpsys window windows` should show a `info.cemu.cemu_thor.debug` window on `mDisplayId=4` while `EmulationActivity` is on `displayId=0`.
+
+## Existing Cemu Data Copy
+
+The original Android Cemu package on the test Thor was `info.cemu.cemu`. To copy its external files into the debug Thor package:
+
+```sh
+adb shell am force-stop info.cemu.cemu_thor.debug
+adb shell "run-as info.cemu.cemu_thor.debug sh -c 'cp -a /sdcard/Android/data/info.cemu.cemu/files/. /sdcard/Android/data/info.cemu.cemu_thor.debug/files/'"
+```
+
+This copies settings, keys, saves, shader cache, graphic packs, and `mlc01`. Android SAF grants do not transfer between packages, so copied `content://` game-folder permissions may fail in `cemu_thor`; direct `/storage/...` paths from the title cache can still work, and users may need to reselect their game folder inside `cemu_thor`.
 
 ## Custom Turnip Drivers
 
