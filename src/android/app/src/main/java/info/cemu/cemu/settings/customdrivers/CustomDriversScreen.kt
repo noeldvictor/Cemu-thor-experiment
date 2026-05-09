@@ -21,6 +21,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,24 +55,43 @@ fun CustomDriversScreen(
     val installedDrivers by customDriversViewModel.installedDrivers.collectAsState()
     val isSystemDriverSelected by customDriversViewModel.isSystemDriverSelected.collectAsState()
     val isDriverInstallInProgress by customDriversViewModel.isDriverInstallInProgress.collectAsState()
+    val driverInstallProgress by customDriversViewModel.driverInstallProgress.collectAsState()
+    var showTurnipDownloadDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val showImportInstallStatus: (DriverInstallStatus) -> Unit = { installStatus ->
+        val message = when (installStatus) {
+            DriverInstallStatus.AlreadyInstalled -> tr("Driver already installed")
+            DriverInstallStatus.ErrorDownloading -> tr("Failed to download driver")
+            DriverInstallStatus.ErrorInstalling -> tr("Failed to install driver")
+            DriverInstallStatus.Installed -> tr("Driver installed successfully")
+        }
+
+        coroutineScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    val showTurnipInstallStatus: (DriverInstallStatus) -> Unit = { installStatus ->
+        val message = when (installStatus) {
+            DriverInstallStatus.AlreadyInstalled -> tr("Turnip driver already installed and selected")
+            DriverInstallStatus.ErrorDownloading -> tr("Failed to download Turnip driver")
+            DriverInstallStatus.ErrorInstalling -> tr("Failed to install Turnip driver")
+            DriverInstallStatus.Installed -> tr("Turnip driver installed and selected")
+        }
+
+        coroutineScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     val customDriversInstallLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
 
-            customDriversViewModel.installDriver(context, uri) { installStatus ->
-                val message = when (installStatus) {
-                    DriverInstallStatus.AlreadyInstalled -> tr("Driver already installed")
-                    DriverInstallStatus.ErrorInstalling -> tr("Failed to install driver")
-                    DriverInstallStatus.Installed -> tr("Driver installed successfully")
-                }
-
-                coroutineScope.launch {
-                    snackbarHostState.currentSnackbarData?.dismiss()
-                    snackbarHostState.showSnackbar(message)
-                }
-            }
+            customDriversViewModel.installDriver(context, uri, showImportInstallStatus)
         }
 
     ScreenContentLazy(
@@ -79,6 +99,12 @@ fun CustomDriversScreen(
         appBarText = tr("Custom drivers"),
         navigateBack = navigateBack,
         actions = {
+            IconButton(onClick = { showTurnipDownloadDialog = true }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_download),
+                    contentDescription = null
+                )
+            }
             IconButton(onClick = { customDriversInstallLauncher.launch(arrayOf("application/zip")) }) {
                 Icon(
                     painter = painterResource(R.drawable.ic_add),
@@ -103,21 +129,66 @@ fun CustomDriversScreen(
     }
 
     if (isDriverInstallInProgress)
-        DriverInstallProgressDialog()
+        DriverInstallProgressDialog(driverInstallProgress)
+
+    if (showTurnipDownloadDialog) {
+        TurnipDriverDownloadDialog(
+            onConfirm = {
+                showTurnipDownloadDialog = false
+                customDriversViewModel.downloadAndUseLatestTurnipDriver(showTurnipInstallStatus)
+            },
+            onDismiss = { showTurnipDownloadDialog = false }
+        )
+    }
 }
 
 @Composable
-private fun DriverInstallProgressDialog() {
+private fun TurnipDriverDownloadDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         title = {
-            Text(tr("Installing"))
+            Text(tr("Download Turnip driver?"))
+        },
+        text = {
+            Text(
+                tr(
+                    "Download a community Turnip Vulkan driver from K11MCH1/AdrenoToolsDrivers and select it for cemu_thor. Use only on compatible Adreno devices."
+                )
+            )
+        },
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(tr("Download"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(tr("Cancel"))
+            }
+        }
+    )
+}
+
+@Composable
+private fun DriverInstallProgressDialog(driverInstallProgress: DriverInstallProgress) {
+    val progressText = when (driverInstallProgress) {
+        DriverInstallProgress.Downloading -> tr("Downloading Turnip driver")
+        DriverInstallProgress.Installing -> tr("Installing driver in progress")
+    }
+
+    AlertDialog(
+        title = {
+            Text(tr("Working"))
         },
         text = {
             Column(
                 modifier = Modifier.padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(tr("Installing driver in progress"))
+                Text(progressText)
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()

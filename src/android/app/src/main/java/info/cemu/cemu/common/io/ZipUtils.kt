@@ -28,11 +28,17 @@ private fun extractZipEntry(
     buffer: ByteArray,
     targetDir: String,
 ) {
-    val file = Paths.get(targetDir, zipEntry.name).toFile()
+    val targetRoot = Paths.get(targetDir).toAbsolutePath().normalize()
+    val outputPath = targetRoot.resolve(zipEntry.name).normalize()
+    if (!outputPath.startsWith(targetRoot))
+        throw IllegalArgumentException("Invalid zip entry path: ${zipEntry.name}")
+
+    val file = outputPath.toFile()
     if (zipEntry.isDirectory) {
         file.apply { if (!isDirectory) mkdirs() }
         return
     }
+    file.parentFile?.mkdirs()
     FileOutputStream(file).use { fileOutputStream ->
         var bytesRead: Int
         while ((zipInputStream.read(buffer).also { bytesRead = it }) > 0) {

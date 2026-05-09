@@ -51,3 +51,7 @@ Use `adb devices` to confirm the AYN Thor is connected, then install the APK:
 ```sh
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## Custom Turnip Drivers
+
+The Android custom driver screen has an opt-in Turnip download action. It confirms with the user, then fetches a Turnip ZIP from `K11MCH1/AdrenoToolsDrivers`, installs it through the normal custom driver metadata validator, and selects it automatically.
