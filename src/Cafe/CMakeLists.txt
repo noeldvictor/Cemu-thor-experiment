@@ -656,12 +656,24 @@ if (ENABLE_WAYLAND)
 endif()
 
 if (ENABLE_VCPKG)
-  if(WIN32)
+  if(ANDROID)
+    set(_LIBUSB_VCPKG_ROOT "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+    add_library(libusb::libusb STATIC IMPORTED)
+    set_target_properties(libusb::libusb PROPERTIES
+      IMPORTED_LOCATION "${_LIBUSB_VCPKG_ROOT}/lib/libusb-1.0.a"
+      IMPORTED_LOCATION_DEBUG "${_LIBUSB_VCPKG_ROOT}/debug/lib/libusb-1.0.a"
+      INTERFACE_INCLUDE_DIRECTORIES "${_LIBUSB_VCPKG_ROOT}/include"
+      INTERFACE_LINK_LIBRARIES "atomic;m"
+    )
+    target_link_libraries(CemuCafe PRIVATE libusb::libusb)
+  else()
+    if(WIN32)
     set(PKG_CONFIG_EXECUTABLE "${VCPKG_INSTALLED_DIR}/x64-windows/tools/pkgconf/pkgconf.exe")
+    endif()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(libusb REQUIRED IMPORTED_TARGET libusb-1.0)
+    target_link_libraries(CemuCafe PRIVATE PkgConfig::libusb)
   endif()
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(libusb REQUIRED IMPORTED_TARGET libusb-1.0)
-  target_link_libraries(CemuCafe PRIVATE PkgConfig::libusb)
 else ()
   find_package(libusb MODULE REQUIRED)
   target_link_libraries(CemuCafe PRIVATE libusb::libusb)
