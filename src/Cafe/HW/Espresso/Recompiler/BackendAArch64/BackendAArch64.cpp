@@ -896,6 +896,15 @@ void* PPCRecompiler_virtualHLE(PPCInterpreter_t* ppcInterpreter, uint32 hleFuncI
 	return PPCInterpreter_getCurrentInstance();
 }
 
+void* PPCRecompiler_virtualHLEKnown(PPCInterpreter_t* ppcInterpreter, HLECALL hleCall)
+{
+	void* prevRSPTemp = ppcInterpreter->rspTemp;
+	cemu_assert(hleCall != nullptr);
+	hleCall(ppcInterpreter);
+	ppcInterpreter->rspTemp = prevRSPTemp;
+	return PPCInterpreter_getCurrentInstance();
+}
+
 bool AArch64GenContext_t::macro(IMLInstruction* imlInstruction)
 {
 	if (imlInstruction->operation == PPCREC_IML_MACRO_B_TO_REG)
@@ -970,10 +979,25 @@ bool AArch64GenContext_t::macro(IMLInstruction* imlInstruction)
 		str(x30, AdrPreImm(sp, -16));
 
 		mov(x0, HCPU_REG);
-		mov(w1, funcId);
-		// call HLE function
-
-		mov(TEMP_GPR1.XReg, (uint64)PPCRecompiler_virtualHLE);
+		if (funcId != 0xFFD0)
+		{
+			HLECALL hleCall = PPCInterpreter_getHLECall((HLEIDX)funcId);
+			if (hleCall)
+			{
+				mov(x1, (uint64)hleCall);
+				mov(TEMP_GPR1.XReg, (uint64)PPCRecompiler_virtualHLEKnown);
+			}
+			else
+			{
+				mov(w1, funcId);
+				mov(TEMP_GPR1.XReg, (uint64)PPCRecompiler_virtualHLE);
+			}
+		}
+		else
+		{
+			mov(w1, funcId);
+			mov(TEMP_GPR1.XReg, (uint64)PPCRecompiler_virtualHLE);
+		}
 		blr(TEMP_GPR1.XReg);
 
 		mov(HCPU_REG, x0);

@@ -235,6 +235,7 @@ using HLEIDX = sint32;
 
 HLEIDX PPCInterpreter_registerHLECall(HLECALL hleCall, std::string hleName);
 HLECALL PPCInterpreter_getHLECall(HLEIDX funcIndex);
+std::string_view PPCInterpreter_getHLECallName(HLEIDX funcIndex);
 
 // HLE scheduler
 

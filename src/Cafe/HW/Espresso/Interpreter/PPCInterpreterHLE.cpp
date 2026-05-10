@@ -19,6 +19,7 @@ void PPCInterpreter_handleUnsupportedHLECall(PPCInterpreter_t* hCPU)
 
 static constexpr size_t HLE_TABLE_CAPACITY = 0x4000;
 HLECALL s_ppcHleTable[HLE_TABLE_CAPACITY]{};
+std::array<std::string, HLE_TABLE_CAPACITY> s_ppcHleNames{};
 sint32 s_ppcHleTableWriteIndex = 0;
 std::mutex s_ppcHleTableMutex;
 
@@ -34,11 +35,14 @@ HLEIDX PPCInterpreter_registerHLECall(HLECALL hleCall, std::string hleName)
 	{
 		if (s_ppcHleTable[i] == hleCall)
 		{
+			if (s_ppcHleNames[i].empty())
+				s_ppcHleNames[i] = hleName;
 			return i;
 		}
 	}
 	cemu_assert(s_ppcHleTableWriteIndex < HLE_TABLE_CAPACITY);
 	s_ppcHleTable[s_ppcHleTableWriteIndex] = hleCall;
+	s_ppcHleNames[s_ppcHleTableWriteIndex] = std::move(hleName);
 	HLEIDX funcIndex = s_ppcHleTableWriteIndex;
 	s_ppcHleTableWriteIndex++;
 	return funcIndex;
@@ -49,6 +53,13 @@ HLECALL PPCInterpreter_getHLECall(HLEIDX funcIndex)
 	if (funcIndex < 0 || funcIndex >= HLE_TABLE_CAPACITY)
 		return nullptr;
 	return s_ppcHleTable[funcIndex];
+}
+
+std::string_view PPCInterpreter_getHLECallName(HLEIDX funcIndex)
+{
+	if (funcIndex < 0 || funcIndex >= HLE_TABLE_CAPACITY)
+		return {};
+	return s_ppcHleNames[funcIndex];
 }
 
 std::mutex s_hleLogMutex;

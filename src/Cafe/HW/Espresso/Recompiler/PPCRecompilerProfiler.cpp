@@ -1,6 +1,7 @@
 #include "Common/precompiled.h"
 #include "PPCRecompilerProfiler.h"
 #include "Cafe/HW/MMU/MMU.h"
+#include "Cafe/HW/Espresso/PPCState.h"
 #include "Cafe/OS/RPL/rpl.h"
 #include "Cafe/OS/RPL/rpl_structs.h"
 #include "config/ActiveSettings.h"
@@ -98,6 +99,45 @@ namespace
 			memory_readU32(address + 12));
 	}
 
+	bool IsHLEOpcode(uint32 opcode)
+	{
+		return (opcode & 0xFC000000) == 0x04000000;
+	}
+
+	std::string FormatHLEOpcode(uint32 opcode)
+	{
+		const uint32 hleFuncId = opcode & 0xFFFF;
+		if (hleFuncId == 0xFFD0)
+			return "unsupported";
+
+		const std::string_view hleName = PPCInterpreter_getHLECallName((HLEIDX)hleFuncId);
+		if (!hleName.empty())
+			return fmt::format("{}(0x{:04x})", hleName, hleFuncId);
+
+		return fmt::format("hle#0x{:04x}", hleFuncId);
+	}
+
+	std::string FormatBlockDetails(uint32 address)
+	{
+		if (!memory_isAddressRangeAccessible(address, 16))
+			return "-";
+
+		std::vector<std::string> hleCalls;
+		hleCalls.reserve(4);
+		for (uint32 offset = 0; offset < 16; offset += 4)
+		{
+			const uint32 opcode = memory_readU32(address + offset);
+			if (!IsHLEOpcode(opcode))
+				continue;
+			hleCalls.emplace_back(FormatHLEOpcode(opcode));
+		}
+
+		if (hleCalls.empty())
+			return "-";
+
+		return fmt::format("hle={}", fmt::join(hleCalls, ","));
+	}
+
 	void WriteModuleMap(std::ofstream& file)
 	{
 		const sint32 moduleCount = RPLLoader_GetModuleCount();
@@ -188,7 +228,7 @@ std::string PPCRecompilerProfiler::DumpHotBlockProfiler()
 	}
 
 	fmt::println(file, "# Cemu for AYN Thor Experiment guest PPC hot blocks");
-	fmt::println(file, "# Columns: ppc_address estimated_hit_count module module_offset opcode0..opcode3");
+	fmt::println(file, "# Columns: ppc_address estimated_hit_count module module_offset opcode0..opcode3 detail");
 	fmt::println(file, "# sample_rate {}", kHotBlockSampleRate);
 	fmt::println(file, "# estimated_total_samples {}", s_totalSamples.load(std::memory_order_relaxed));
 	fmt::println(file, "# estimated_overflow_samples {}", s_overflowSamples.load(std::memory_order_relaxed));
@@ -198,12 +238,13 @@ std::string PPCRecompilerProfiler::DumpHotBlockProfiler()
 	for (const auto& entry : entries)
 	{
 		const auto [module, moduleOffset] = GetModuleAndOffset(entry.address);
-		fmt::println(file, "0x{:08x}\t{}\t{}\t+0x{:x}\t{}",
+		fmt::println(file, "0x{:08x}\t{}\t{}\t+0x{:x}\t{}\t{}",
 			entry.address,
 			entry.hits,
 			module,
 			moduleOffset,
-			FormatOpcodeWindow(entry.address));
+			FormatOpcodeWindow(entry.address),
+			FormatBlockDetails(entry.address));
 	}
 
 	const auto pathString = _pathToUtf8(dumpPath);
