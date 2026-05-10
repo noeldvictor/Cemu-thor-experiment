@@ -1,14 +1,91 @@
-# **cemu_thor - Android Port (Wii U Emulator)**
+# Cemu for AYN Thor Experiment
 
-This is the **cemu_thor** Android-branded build of Cemu, a Wii U emulator written in C/C++.
-It is still early and experimental. Stability, performance, and features are not guaranteed, and some functionality may be missing compared to the desktop version.
+![Cemu for AYN Thor Experiment banner](docs/assets/cemu-thor-experiment-banner.png)
 
-There is no timeline for when this port will be finished or when new features will be implemented.
+This is a personal Android experiment fork of Cemu for the AYN Thor dual-screen handheld.
 
-**Please do not open issues or pull requests yet.**
-Development is ongoing, and contributions will be welcome once the project is more stable.
+It is vibe coded with AI assistance. It is messy, practical, and focused on making one real device do cool things. There is no guarantee of stability, correctness, compatibility, performance, or support. If that is a problem, please use upstream Cemu, another Android fork, or fork this repo and do your own thing.
 
-For general information about Cemu, see the [official website](https://cemu.info) and [main repository](https://github.com/cemu-project/Cemu).
+Please do not open issues here. This is not a support queue. Fork it, patch it, break it, fix it.
+
+## Screenshots
+
+![Star Fox Zero running on Cemu for AYN Thor Experiment](docs/screenshots/starfox-running.png)
+
+![Star Fox Zero OSD Controller Help](docs/screenshots/starfox-osd-controller-help.png)
+
+## Credit
+
+This project stands on other people's work:
+
+- [Cemu](https://github.com/cemu-project/Cemu), the original Wii U emulator project.
+- [SSimco/Cemu](https://github.com/SSimco/Cemu), Android fork work this branch tracks and merges from.
+- [SapphireRhodonite/Cemu](https://github.com/SapphireRhodonite/Cemu), especially the Android dual-screen direction that made this AYN Thor experiment a useful starting point.
+
+The current personal fork is [noeldvictor/Cemu_thor](https://github.com/noeldvictor/Cemu_thor).
+
+## What This Fork Is
+
+- A Cemu Android build branded as **Cemu for AYN Thor Experiment**.
+- A personal-use AYN Thor branch, not a general Android compatibility promise.
+- A dual-screen handheld playground with Android presentation-display support.
+- A test bed for Star Fox Zero on Thor, including controller profile work, graphics-pack cheats, and crash/performance experiments.
+- An opt-in custom Turnip Vulkan driver flow for people testing community Turnip builds.
+
+This project does not include games, keys, firmware dumps, system files, or copyrighted game assets.
+
+## Clear Divergence From Cemu Android
+
+This fork has intentionally diverged from a plain Cemu Android build in several places:
+
+- Separate Android package id: `info.cemu.cemu_thor`.
+- AYN Thor dual-screen behavior for PAD presentation, screen swapping, and external-screen rotation.
+- Two-panel in-game OSD with Display, Performance, Audio, Controls, Controller Help, and Tools sections.
+- OSD toggles for FPS display, session-only performance experiments, GamePad audio, and GamePad volume.
+- Custom Turnip driver download/select flow for Android Vulkan driver testing.
+- Star Fox Zero USA game profile with Thor-specific performance defaults.
+- Star Fox Zero controller profile that keeps physical right stick for gyro-style aiming and moves boost/brake/maneuvers to buttons.
+- Star Fox Zero OSD Controller Help, including an `R2 fires laser` live toggle.
+- Built-in Star Fox Zero cheat graphic packs for Infinite Life and Super Shot.
+- Android ARM64 recompiler and crash fixes found while testing Star Fox Zero on Thor.
+- Experimental branding, icon, screenshots, and docs that make this fork visibly separate from upstream Cemu.
+
+## Star Fox Zero Notes
+
+The Star Fox profile is opinionated because the AYN Thor is not a Wii U GamePad. The current Thor layout is:
+
+- Right stick: gyro-style cockpit aim
+- R2: laser / charge shot
+- A: transform / confirm
+- B: smart bomb
+- X/Y: boost / brake by emulating Wii U right-stick up/down
+- L/R: bank / barrel roll by emulating Wii U right-stick left/right
+- L2: target view
+- Select: recenter aim
+- L3/R3: U-turn / somersault
+
+The OSD toggle can swap A and R2 for people who prefer the other laser/transform layout.
+
+## Building
+
+Android lives in `src/android`.
+
+From the repo root:
+
+```sh
+git submodule update --init --recursive
+```
+
+From `src/android`:
+
+```sh
+./gradlew.bat :app:assembleRelease
+```
+
+Release builds are the only useful builds for performance testing. Debug builds can be much slower.
 
 ## License
-Cemu is licensed under [Mozilla Public License 2.0](/LICENSE.txt). Exempt from this are all files in the dependencies directory for which the licenses of the original code apply as well as some individual files in the src folder, as specified in those file headers respectively.
+
+Cemu is licensed under the [Mozilla Public License 2.0](LICENSE.txt). Dependency and source-file exceptions follow the upstream license notes.
+
+This fork's branding/docs/screenshots are part of the experiment. The emulator code remains under the applicable upstream licenses.

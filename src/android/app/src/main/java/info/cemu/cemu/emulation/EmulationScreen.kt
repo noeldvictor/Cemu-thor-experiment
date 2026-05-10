@@ -78,6 +78,7 @@ import info.cemu.cemu.emulation.inputoverlay.InputOverlaySurfaceView.InputMode.D
 import info.cemu.cemu.emulation.inputoverlay.InputOverlaySurfaceView.InputMode.EDIT_POSITION
 import info.cemu.cemu.emulation.inputoverlay.InputOverlaySurfaceView.InputMode.EDIT_SIZE
 import info.cemu.cemu.nativeinterface.NativeEmulation
+import info.cemu.cemu.nativeinterface.NativeInput
 import info.cemu.cemu.nativeinterface.NativeSettings
 import kotlinx.coroutines.launch
 
@@ -107,6 +108,7 @@ fun EmulationScreen(
     val inputOverlaySettings by viewModel.inputOverlaySettings.collectAsState()
     val mainSurfaceDimensions by viewModel.mainSurfaceDimensions.collectAsState()
     val padSurfaceDimensions by viewModel.padSurfaceDimensions.collectAsState()
+    val showStarFoxControllerHelp = remember(gamePath) { isStarFoxZeroLaunch(gamePath) }
 
 
     fun closeDrawer() {
@@ -175,6 +177,7 @@ fun EmulationScreen(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .fillMaxWidth(),
+                    showControllerHelp = showStarFoxControllerHelp,
                     sideMenuState = sideMenuState,
                     updateState = {
                         viewModel.updateSideMenuState(it)
@@ -315,12 +318,14 @@ private enum class SideMenuSection {
     PERFORMANCE,
     AUDIO,
     CONTROLS,
+    CONTROLLER_HELP,
     TOOLS,
 }
 
 @Composable
 private fun EmulationSideMenuContent(
     modifier: Modifier = Modifier,
+    showControllerHelp: Boolean,
     sideMenuState: SideMenuState,
     updateState: (SideMenuState) -> Unit,
     onShowEmulatedUSBDevices: () -> Unit,
@@ -356,6 +361,13 @@ private fun EmulationSideMenuContent(
                 selected = selectedSection == SideMenuSection.CONTROLS,
                 onClick = { selectedSection = SideMenuSection.CONTROLS },
             )
+            if (showControllerHelp) {
+                SideMenuNavItem(
+                    label = tr("Controller Help"),
+                    selected = selectedSection == SideMenuSection.CONTROLLER_HELP,
+                    onClick = { selectedSection = SideMenuSection.CONTROLLER_HELP },
+                )
+            }
             SideMenuNavItem(
                 label = tr("Tools"),
                 selected = selectedSection == SideMenuSection.TOOLS,
@@ -396,6 +408,7 @@ private fun EmulationSideMenuContent(
                     onEditInputOverlay = onEditInputOverlay,
                     onResetInputOverlay = onResetInputOverlay,
                 )
+                SideMenuSection.CONTROLLER_HELP -> ControllerHelpMenuContent()
                 SideMenuSection.TOOLS -> ToolsMenuContent(onShowEmulatedUSBDevices)
             }
         }
@@ -408,6 +421,7 @@ private fun SideMenuSection.title(): String = when (this) {
     SideMenuSection.PERFORMANCE -> tr("Performance")
     SideMenuSection.AUDIO -> tr("Audio")
     SideMenuSection.CONTROLS -> tr("Controls")
+    SideMenuSection.CONTROLLER_HELP -> tr("Controller Help")
     SideMenuSection.TOOLS -> tr("Tools")
 }
 
@@ -577,6 +591,101 @@ private fun ToolsMenuContent(onShowEmulatedUSBDevices: () -> Unit) {
         label = tr("Emulated USB Devices"),
         onClick = onShowEmulatedUSBDevices,
     )
+}
+
+@Composable
+private fun ControllerHelpMenuContent() {
+    var isR2Laser by rememberSaveable { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        isR2Laser = isStarFoxR2LaserMappingActive()
+    }
+
+    Text(
+        text = tr("Star Fox Zero"),
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+        fontSize = 17.sp,
+    )
+
+    CheckboxItem(
+        label = tr("R2 fires laser"),
+        checked = isR2Laser,
+        onCheckedChange = { enabled ->
+            if (enabled != isR2Laser) {
+                NativeInput.swapControllerMappings(
+                    STAR_FOX_CONTROLLER_INDEX,
+                    NativeInput.VPADButton.A,
+                    NativeInput.VPADButton.ZR,
+                )
+            }
+            isR2Laser = isStarFoxR2LaserMappingActive()
+        },
+    )
+
+    val laserInput = if (isR2Laser) tr("R2") else tr("A")
+    val transformInput = if (isR2Laser) tr("A") else tr("R2")
+
+    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+    ControllerHelpRow(tr("Right stick"), tr("Aim / cockpit gyro (low sensitivity, inverted Y)"))
+    ControllerHelpRow(laserInput, tr("Laser / charge shot"))
+    ControllerHelpRow(transformInput, tr("Transform / confirm"))
+    ControllerHelpRow(tr("B"), tr("Smart bomb"))
+    ControllerHelpRow(tr("X"), tr("Boost"))
+    ControllerHelpRow(tr("Y"), tr("Brake / hover"))
+    ControllerHelpRow(tr("L / R"), tr("Bank / barrel roll"))
+    ControllerHelpRow(tr("L2"), tr("Target mode"))
+    ControllerHelpRow(tr("Select"), tr("Recenter aim"))
+    ControllerHelpRow(tr("L3 / R3"), tr("U-turn / somersault"))
+
+    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+    Text(
+        text = tr("This profile keeps aiming on the right stick and moves boost, brake, and maneuvers to buttons."),
+        modifier = Modifier.padding(8.dp),
+        fontSize = 14.sp,
+    )
+}
+
+@Composable
+private fun ControllerHelpRow(
+    input: String,
+    action: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = input,
+            modifier = Modifier.width(96.dp),
+            fontSize = 15.sp,
+        )
+        Text(
+            text = action,
+            modifier = Modifier.weight(1f),
+            fontSize = 15.sp,
+        )
+    }
+}
+
+private fun isStarFoxZeroLaunch(gamePath: String): Boolean {
+    val normalizedPath = gamePath.lowercase()
+    return normalizedPath.contains("star fox zero") ||
+            normalizedPath.contains("101b0400") ||
+            normalizedPath.contains("101b0500")
+}
+
+private const val STAR_FOX_CONTROLLER_INDEX = 0
+
+private fun isStarFoxR2LaserMappingActive(): Boolean {
+    val mapping = NativeInput.getControllerMapping(
+        STAR_FOX_CONTROLLER_INDEX,
+        NativeInput.VPADButton.ZR,
+    )
+    return mapping.isEmpty() || mapping.contains("Button R2")
 }
 
 @Composable

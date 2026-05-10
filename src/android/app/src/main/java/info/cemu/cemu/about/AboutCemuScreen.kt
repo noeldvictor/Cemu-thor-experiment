@@ -50,7 +50,7 @@ fun AboutCemuScreen(navigateBack: () -> Unit) {
     val libraries by produceLibraries(R.raw.aboutlibraries)
 
     ScreenContentLazy(
-        appBarText = tr("About cemu_thor"),
+        appBarText = tr("About Cemu for AYN Thor Experiment"),
         navigateBack = navigateBack,
         contentModifier = Modifier
             .fillMaxWidth()
@@ -109,7 +109,7 @@ private fun LazyListScope.disclaimerSection() {
     item {
         AboutSection {
             Text(
-                text = tr("cemu_thor is a Wii U emulator based on Cemu.\n\nWii and Wii U are trademarks of Nintendo.\ncemu_thor is not affiliated with Nintendo."),
+                text = tr("Cemu for AYN Thor Experiment is a personal-use Wii U emulator experiment based on Cemu and Android fork work by SapphireRhodonite.\n\nThis build is vibe coded with AI assistance, has no stability guarantee, and is not affiliated with Nintendo. Wii and Wii U are trademarks of Nintendo."),
                 fontSize = 18.sp
             )
         }

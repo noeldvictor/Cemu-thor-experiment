@@ -2,7 +2,7 @@
 
 ## Project
 
-This checkout is `noeldvictor/Cemu_thor`, an Android-focused Cemu fork. The default fork branch is `android-port`.
+This checkout is `noeldvictor/Cemu_thor`, an Android-focused Cemu fork. Treat `android-port` as this personal fork's main/master branch.
 
 ## Remotes
 
@@ -21,7 +21,7 @@ git fetch --all --prune
 
 As of this update, `origin/android-port` was identical to `sapphire/android-port` and fast-forwarded cleanly to `ssimco/android-port`. Prefer `git rev-list --left-right --count origin/android-port...ssimco/android-port` before merging so the update direction is explicit.
 
-Use a `codex/` branch for agent work. Do not reset, checkout, or revert user changes unless the user explicitly asks for that.
+Do not create `codex/` branches for routine Codex development in this repo. Work directly on `android-port`, since this is a personal experiment branch rather than a shared upstream-style review flow. Do not reset, checkout, or revert user changes unless the user explicitly asks for that.
 
 ## Android Build
 
@@ -94,9 +94,9 @@ Star Fox Zero also hit Android native `signal 7` crashes under laser/explosion l
 
 The built-in Star Fox Zero USA profile is `bin/gameProfiles/default/00050000101b0400.ini`. It uses multi-core recompiler, a modestly larger thread quantum, async compile, accurate barriers on, and GX2DrawDone full sync off as the first per-game performance win. Game profiles can override `asyncCompile`, `accurateBarriers`, and `gx2DrawDoneSync`; runtime code should read these through `ActiveSettings` instead of directly from `GetConfig()` when emulation is active.
 
-Built-in Cemu Thor Star Fox Zero cheat packs live under `bin/graphicPacks/cemuThorBuiltin`. `StarFoxZero_SuperShot` is the validated USA v16 bomb decrement patch, while `StarFoxZero_InfiniteLife` is an experimental USA v16 player-damage dispatcher patch that should stay opt-in until it survives mission testing.
+Built-in Cemu Thor Star Fox Zero cheat packs live under `bin/graphicPacks/cemuThorBuiltin`. `StarFoxZero_SuperShot` is the validated USA v16 bomb decrement patch. `StarFoxZero_InfiniteLife` uses the safer USA v16 shield/life store patch at `0x024F6A4C`, which NOPs only the current-life commit after damage math so normal hit reactions, warning UI, and mission scripts still run. Avoid returning early from the broader player damage dispatcher at `0x024F9388`; that was too invasive for mission stability.
 
-The Star Fox Zero USA profile auto-loads `bin/controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml` on Thor. This profile maps the physical right stick to VPAD motion aiming, A to laser, B to smart bomb, X/Y to boost/brake, L/R to bank/roll, L2 to target view, and R2 to transform/confirm. Keep boost/brake/acrobatic maneuvers on buttons so the right stick stays dedicated to aiming.
+The Star Fox Zero USA profile auto-loads `bin/controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml` on Thor. This profile maps the physical right stick to VPAD motion aiming at 0.35 sensitivity with pitch/Y inverted, R2 to laser/charge shot, A to transform/confirm, B to smart bomb, X/Y to VPAD right-stick up/down for boost/brake, L/R to VPAD right-stick left/right for bank/barrel roll, L2 to target view, Select to recenter aim, and stick clicks to VPAD B/X for U-turn/somersault. The Star Fox-only Controller Help OSD has an `R2 fires laser` toggle that live-swaps VPAD A/ZR for users who prefer the opposite A/R2 layout. Keep boost/brake/acrobatic maneuvers on buttons so the physical right stick stays dedicated to aiming. Button-to-axis mappings depend on `ControllerBase::get_axis_value()` treating pressed non-axis buttons as a full axis press.
 
 If Android reports `Process info.cemu.cemu_thor:EmulationProcess exited cleanly (1)`, it can still be Cemu's fatal handler exiting after writing to `log.txt`. Newer builds preserve the previous run as `/sdcard/Android/data/info.cemu.cemu_thor/files/log.previous.txt` before truncating `log.txt`, so check that file first after an unexpected reset.
 

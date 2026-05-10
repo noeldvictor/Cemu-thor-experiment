@@ -1,6 +1,7 @@
 #include "input/emulated/EmulatedController.h"
 
 #include "input/api/Controller.h"
+#include <mutex>
 
 #ifdef SUPPORTS_WIIMOTE
 #include "input/api/Wiimote/NativeWiimoteController.h"
@@ -350,6 +351,28 @@ void EmulatedController::set_mapping(uint64 mapping, const std::shared_ptr<Contr
                                      uint64 button)
 {
 	m_mappings[mapping] = { controller, button };
+}
+
+void EmulatedController::swap_mappings(uint64 firstMapping, uint64 secondMapping)
+{
+	if (firstMapping == secondMapping)
+		return;
+
+	std::unique_lock lock(m_mutex);
+	auto first = m_mappings.extract(firstMapping);
+	auto second = m_mappings.extract(secondMapping);
+
+	if (first)
+	{
+		first.key() = secondMapping;
+		m_mappings.insert(std::move(first));
+	}
+
+	if (second)
+	{
+		second.key() = firstMapping;
+		m_mappings.insert(std::move(second));
+	}
 }
 
 bool EmulatedController::operator==(const EmulatedController& o) const

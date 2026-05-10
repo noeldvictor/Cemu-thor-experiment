@@ -149,6 +149,10 @@ float ControllerBase::get_axis_value(uint64 button) const
 		case kTriggerYN:
 			return std::abs(m_last_state.trigger.y);
 		}
+
+		// Some Android profiles intentionally map physical buttons to emulated
+		// stick directions. Treat pressed non-axis inputs as a full axis press.
+		return 1.0f;
 	}
 
 	return 0;

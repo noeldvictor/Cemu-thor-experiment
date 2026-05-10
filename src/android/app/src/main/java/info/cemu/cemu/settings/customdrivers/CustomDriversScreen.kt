@@ -186,7 +186,7 @@ private fun TurnipDriverDownloadDialog(
         text = {
             Text(
                 tr(
-                    "Download a community Turnip Vulkan driver and select it for cemu_thor. Recommended uses Kimchi/K11MCH1; Choose includes StevenMXZ and Banners-Turnip builds if you are following a specific recommendation."
+                    "Download a community Turnip Vulkan driver and select it for Cemu for AYN Thor Experiment. Recommended uses Kimchi/K11MCH1; Choose includes StevenMXZ and Banners-Turnip builds if you are following a specific recommendation."
                 )
             )
         },

@@ -87,13 +87,13 @@ private fun OverlaySettings() {
     )
     Toggle(
         label = tr("CPU usage"),
-        description = tr("CPU usage of cemu_thor in percent"),
+        description = tr("CPU usage of this experiment in percent"),
         initialCheckedState = NativeSettings::isOverlayCPUUsageEnabled,
         onCheckedChanged = NativeSettings::setOverlayCPUUsageEnabled,
     )
     Toggle(
         label = tr("RAM usage"),
-        description = tr("cemu_thor RAM usage in MB"),
+        description = tr("Experiment RAM usage in MB"),
         initialCheckedState = NativeSettings::isOverlayRAMUsageEnabled,
         onCheckedChanged = NativeSettings::setOverlayRAMUsageEnabled,
     )

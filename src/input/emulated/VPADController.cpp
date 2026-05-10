@@ -240,6 +240,12 @@ void VPADController::update_touch(VPADStatus_t& status)
 void VPADController::update_motion(VPADStatus_t& status)
 {
 	auto& input_manager = InputManager::instance();
+	if (m_right_stick_motion)
+	{
+		update_right_stick_motion(status);
+		return;
+	}
+
 	if (has_motion())
 	{
 		MotionSample motionSample = get_motion_data();
@@ -279,12 +285,6 @@ void VPADController::update_motion(VPADStatus_t& status)
 		status.dir.z.x = attitude[6];
 		status.dir.z.y = attitude[7];
 		status.dir.z.z = attitude[8];
-		return;
-	}
-
-	if (m_right_stick_motion)
-	{
-		update_right_stick_motion(status);
 		return;
 	}
 
@@ -376,33 +376,29 @@ glm::vec2 VPADController::get_right_stick_motion_axis() const
 
 void VPADController::update_right_stick_motion(VPADStatus_t& status)
 {
-	const auto now = std::chrono::high_resolution_clock::now();
-	float dt = 0.0f;
-	if (m_right_stick_motion_last_update.time_since_epoch().count() != 0)
-	{
-		dt = std::chrono::duration<float>(now - m_right_stick_motion_last_update).count();
-		dt = std::clamp(dt, 0.0f, 1.0f / 30.0f);
-	}
-	m_right_stick_motion_last_update = now;
-
 	const auto stick = get_right_stick_motion_axis();
-	const auto previousRotation = m_right_stick_motion_rotation;
 	const float sensitivity = std::clamp(m_right_stick_motion_sensitivity, 0.1f, 3.0f);
-	constexpr float kPitchDegreesPerSecond = 150.0f;
-	constexpr float kYawDegreesPerSecond = 210.0f;
+	constexpr float kPitchRangeDegrees = 70.0f;
+	constexpr float kYawRangeDegrees = 105.0f;
 
-	m_right_stick_motion_rotation.x += -stick.y * kPitchDegreesPerSecond * sensitivity * dt;
-	m_right_stick_motion_rotation.y += -stick.x * kYawDegreesPerSecond * sensitivity * dt;
-	m_right_stick_motion_rotation.x = std::clamp(m_right_stick_motion_rotation.x, -85.0f, 85.0f);
-	m_right_stick_motion_rotation.y = std::clamp(m_right_stick_motion_rotation.y, -135.0f, 135.0f);
+	glm::vec3 rotation{};
+	rotation.x = -stick.y * kPitchRangeDegrees * sensitivity;
+	rotation.y = -stick.x * kYawRangeDegrees * sensitivity;
+	if (m_right_stick_motion_invert_pitch)
+		rotation.x = -rotation.x;
+	if (m_right_stick_motion_invert_yaw)
+		rotation.y = -rotation.y;
+	rotation.x = std::clamp(rotation.x, -85.0f, 85.0f);
+	rotation.y = std::clamp(rotation.y, -135.0f, 135.0f);
 
-	Quaternion<float> q(m_right_stick_motion_rotation.x, m_right_stick_motion_rotation.y, 0.0f);
+	Quaternion<float> q(rotation.x, rotation.y, rotation.z);
 	auto rot = q.GetTransposedRotationMatrix();
 	status.dir.x = std::get<0>(rot);
 	status.dir.y = std::get<1>(rot);
 	status.dir.z = std::get<2>(rot);
 
-	glm::vec3 delta = m_right_stick_motion_rotation - previousRotation;
+	glm::vec3 delta = rotation - m_right_stick_motion_last_rotation;
+	m_right_stick_motion_last_rotation = rotation;
 	delta.y *= 15.0f;
 	delta.x = std::clamp(delta.x / 360.0f, -1.0f, 1.0f);
 	delta.y = std::clamp(delta.y / 360.0f, -1.0f, 1.0f);
@@ -761,6 +757,10 @@ void VPADController::load(const pugi::xml_node& node)
 		m_right_stick_motion = ConvertString<bool>(value.child_value());
 	if (const auto value = node.child("right_stick_motion_sensitivity"))
 		m_right_stick_motion_sensitivity = ConvertString<float>(value.child_value());
+	if (const auto value = node.child("right_stick_motion_invert_pitch"))
+		m_right_stick_motion_invert_pitch = ConvertString<bool>(value.child_value());
+	if (const auto value = node.child("right_stick_motion_invert_yaw"))
+		m_right_stick_motion_invert_yaw = ConvertString<bool>(value.child_value());
 }
 
 void VPADController::save(pugi::xml_node& node)
@@ -768,4 +768,6 @@ void VPADController::save(pugi::xml_node& node)
 	node.append_child("toggle_display").append_child(pugi::node_pcdata).set_value(fmt::format("{}", (int)m_screen_active_toggle).c_str());
 	node.append_child("right_stick_motion").append_child(pugi::node_pcdata).set_value(fmt::format("{}", (int)m_right_stick_motion).c_str());
 	node.append_child("right_stick_motion_sensitivity").append_child(pugi::node_pcdata).set_value(fmt::format("{}", m_right_stick_motion_sensitivity).c_str());
+	node.append_child("right_stick_motion_invert_pitch").append_child(pugi::node_pcdata).set_value(fmt::format("{}", (int)m_right_stick_motion_invert_pitch).c_str());
+	node.append_child("right_stick_motion_invert_yaw").append_child(pugi::node_pcdata).set_value(fmt::format("{}", (int)m_right_stick_motion_invert_yaw).c_str());
 }

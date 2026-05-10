@@ -209,6 +209,9 @@ object NativeInput {
     )
 
     @JvmStatic
+    external fun swapControllerMappings(index: Int, firstMappingId: Int, secondMappingId: Int)
+
+    @JvmStatic
     external fun clearControllerMapping(index: Int, mappingId: Int)
 
     @JvmStatic

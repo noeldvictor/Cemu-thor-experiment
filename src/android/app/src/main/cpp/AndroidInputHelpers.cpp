@@ -75,6 +75,14 @@ void EmulatedControllerManager::SetMapping(uint64 mappingId, ControllerPtr contr
 	m_emulatedController->set_mapping(mappingId, controller, buttonId);
 }
 
+void EmulatedControllerManager::SwapMappings(uint64 firstMappingId, uint64 secondMappingId)
+{
+	if (!m_emulatedController)
+		return;
+
+	m_emulatedController->swap_mappings(firstMappingId, secondMappingId);
+}
+
 std::optional<std::string> EmulatedControllerManager::GetMapping(uint64 mapping) const
 {
 	if (!m_emulatedController)

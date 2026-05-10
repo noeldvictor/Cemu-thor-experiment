@@ -25,6 +25,8 @@ class EmulatedControllerManager
 
 	void SetMapping(uint64 mappingId, ControllerPtr controller, uint64 buttonId);
 
+	void SwapMappings(uint64 firstMappingId, uint64 secondMappingId);
+
 	std::optional<std::string> GetMapping(uint64 mapping) const;
 
 	std::map<uint64, std::string> GetMappings() const;

@@ -80,6 +80,7 @@ public:
 	void delete_mapping(uint64 mapping);
 	void clear_mappings();
 	void set_mapping(uint64 mapping, const std::shared_ptr<ControllerBase>& controller_base, uint64 button);
+	void swap_mappings(uint64 firstMapping, uint64 secondMapping);
 
 	virtual uint32 get_emulated_button_flag(uint32 mapping) const = 0;
 

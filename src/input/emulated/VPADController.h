@@ -97,8 +97,9 @@ private:
 	bool m_screen_active_toggle = false;
 	bool m_right_stick_motion = false;
 	float m_right_stick_motion_sensitivity = 1.0f;
-	glm::vec3 m_right_stick_motion_rotation{};
-	std::chrono::high_resolution_clock::time_point m_right_stick_motion_last_update{};
+	bool m_right_stick_motion_invert_pitch = false;
+	bool m_right_stick_motion_invert_yaw = false;
+	glm::vec3 m_right_stick_motion_last_rotation{};
 	uint32be m_last_holdvalue = 0;
 
 	std::chrono::high_resolution_clock::time_point m_last_hold_change{}, m_last_pulse{};

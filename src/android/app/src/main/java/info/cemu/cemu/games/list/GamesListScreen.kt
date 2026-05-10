@@ -121,7 +121,7 @@ fun GamesListScreen(
                             if (!tryOpenCemuFolder(context)) {
                                 snackbarHostState.showMessage(
                                     coroutineScope,
-                                    tr("Failed to open cemu_thor folder")
+                                    tr("Failed to open experiment folder")
                                 )
                             }
                         },
@@ -434,7 +434,7 @@ private fun GameListToolBarActionsMenu(
         )
         DropdownMenuItem(
             onClick = openCemuFolder,
-            text = tr("Open cemu_thor folder")
+            text = tr("Open experiment folder")
         )
         DropdownMenuItem(
             onClick = shareLogFile,
@@ -442,7 +442,7 @@ private fun GameListToolBarActionsMenu(
         )
         DropdownMenuItem(
             onClick = goToAboutCemu,
-            text = tr("About cemu_thor"),
+            text = tr("About Cemu for AYN Thor Experiment"),
         )
     }
 }

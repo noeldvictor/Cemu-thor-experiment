@@ -271,6 +271,12 @@ Java_info_cemu_cemu_nativeinterface_NativeInput_setControllerMapping(JNIEnv* env
 	EmulatedControllerManager::GetController(index).SetMapping(mappingId, controller, buttonId);
 }
 
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeInput_swapControllerMappings([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jint index, jint firstMappingId, jint secondMappingId)
+{
+	EmulatedControllerManager::GetController(index).SwapMappings(firstMappingId, secondMappingId);
+}
+
 extern "C" [[maybe_unused]] JNIEXPORT jstring JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeInput_getControllerMapping(JNIEnv* env, [[maybe_unused]] jclass clazz, jint index, jint mappingId)
 {
