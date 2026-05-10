@@ -8,6 +8,7 @@
 #include "input/InputManager.h"
 #include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/CafeSystem.h"
+#include <algorithm>
 
 enum ControllerVPADMapping2 : uint32
 {
@@ -281,6 +282,12 @@ void VPADController::update_motion(VPADStatus_t& status)
 		return;
 	}
 
+	if (m_right_stick_motion)
+	{
+		update_right_stick_motion(status);
+		return;
+	}
+
 	bool pad_view;
 	if (const auto right_mouse = input_manager.get_right_down_mouse_info(&pad_view))
 	{
@@ -351,6 +358,62 @@ void VPADController::update_motion(VPADStatus_t& status)
 
 		m_lastGyroRotation = {rotX, rotY, rotZ};
 	}
+}
+
+glm::vec2 VPADController::get_right_stick_motion_axis() const
+{
+	std::shared_lock lock(m_mutex);
+	glm::vec2 result{};
+	for (const auto& controller : m_controllers)
+	{
+		const auto rotation = controller->get_state().rotation;
+		if (length(rotation) > length(result))
+			result = rotation;
+	}
+
+	return length(result) > 1.0f ? normalize(result) : result;
+}
+
+void VPADController::update_right_stick_motion(VPADStatus_t& status)
+{
+	const auto now = std::chrono::high_resolution_clock::now();
+	float dt = 0.0f;
+	if (m_right_stick_motion_last_update.time_since_epoch().count() != 0)
+	{
+		dt = std::chrono::duration<float>(now - m_right_stick_motion_last_update).count();
+		dt = std::clamp(dt, 0.0f, 1.0f / 30.0f);
+	}
+	m_right_stick_motion_last_update = now;
+
+	const auto stick = get_right_stick_motion_axis();
+	const auto previousRotation = m_right_stick_motion_rotation;
+	const float sensitivity = std::clamp(m_right_stick_motion_sensitivity, 0.1f, 3.0f);
+	constexpr float kPitchDegreesPerSecond = 150.0f;
+	constexpr float kYawDegreesPerSecond = 210.0f;
+
+	m_right_stick_motion_rotation.x += -stick.y * kPitchDegreesPerSecond * sensitivity * dt;
+	m_right_stick_motion_rotation.y += -stick.x * kYawDegreesPerSecond * sensitivity * dt;
+	m_right_stick_motion_rotation.x = std::clamp(m_right_stick_motion_rotation.x, -85.0f, 85.0f);
+	m_right_stick_motion_rotation.y = std::clamp(m_right_stick_motion_rotation.y, -135.0f, 135.0f);
+
+	Quaternion<float> q(m_right_stick_motion_rotation.x, m_right_stick_motion_rotation.y, 0.0f);
+	auto rot = q.GetTransposedRotationMatrix();
+	status.dir.x = std::get<0>(rot);
+	status.dir.y = std::get<1>(rot);
+	status.dir.z = std::get<2>(rot);
+
+	glm::vec3 delta = m_right_stick_motion_rotation - previousRotation;
+	delta.y *= 15.0f;
+	delta.x = std::clamp(delta.x / 360.0f, -1.0f, 1.0f);
+	delta.y = std::clamp(delta.y / 360.0f, -1.0f, 1.0f);
+	delta.z = 0.0f;
+
+	status.gyroChange = {delta.x, delta.y, delta.z};
+	status.gyroOrientation = {delta.x, delta.y, delta.z};
+	status.acc = {delta.x, delta.y, delta.z};
+	status.accAcceleration = 1.0f;
+	status.accMagnitude = 1.0f;
+	status.accXY = {1.0f, 0.0f};
 }
 
 
@@ -694,9 +757,15 @@ void VPADController::load(const pugi::xml_node& node)
 {
 	if (const auto value = node.child("toggle_display"))
 		m_screen_active_toggle = ConvertString<bool>(value.child_value());
+	if (const auto value = node.child("right_stick_motion"))
+		m_right_stick_motion = ConvertString<bool>(value.child_value());
+	if (const auto value = node.child("right_stick_motion_sensitivity"))
+		m_right_stick_motion_sensitivity = ConvertString<float>(value.child_value());
 }
 
 void VPADController::save(pugi::xml_node& node)
 {
 	node.append_child("toggle_display").append_child(pugi::node_pcdata).set_value(fmt::format("{}", (int)m_screen_active_toggle).c_str());
+	node.append_child("right_stick_motion").append_child(pugi::node_pcdata).set_value(fmt::format("{}", (int)m_right_stick_motion).c_str());
+	node.append_child("right_stick_motion_sensitivity").append_child(pugi::node_pcdata).set_value(fmt::format("{}", m_right_stick_motion_sensitivity).c_str());
 }

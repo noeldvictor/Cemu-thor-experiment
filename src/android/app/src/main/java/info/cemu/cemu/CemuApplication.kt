@@ -35,9 +35,9 @@ class CemuApplication : Application() {
 
         initializeTranslations()
 
-        initializeCemu()
-
         saveDataFiles()
+
+        initializeCemu()
     }
 
     private fun initializeTranslations() {
@@ -71,7 +71,16 @@ class CemuApplication : Application() {
             return
         }
 
+        val builtinGraphicPacksFolder =
+            File(internalCemuUserFolder).resolve("graphicPacks/cemuThorBuiltin")
+        val builtinStarFoxControllerProfile =
+            File(internalCemuUserFolder).resolve(
+                "controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml"
+            )
+
         dataFolder.deleteRecursively()
+        builtinGraphicPacksFolder.deleteRecursively()
+        builtinStarFoxControllerProfile.delete()
         dataFolder.mkdirs()
         dataFolder.resolve(hashFileName).writeText(newHash)
 
@@ -91,7 +100,9 @@ class CemuApplication : Application() {
         }
 
         val filePatterns = arrayOf(
+            Pattern.compile("controllerProfiles/CemuThor_StarFoxZero_StarFox64ish\\.xml"),
             Pattern.compile("gameProfiles/.*"),
+            Pattern.compile("graphicPacks/cemuThorBuiltin/.*"),
             Pattern.compile("resources/.*"),
         )
 
@@ -104,7 +115,15 @@ class CemuApplication : Application() {
                 continue
             }
 
-            val outFile = dataFolder.resolve(assetFile)
+            val outFile =
+                if (
+                    assetFile.startsWith("graphicPacks/cemuThorBuiltin/") ||
+                    assetFile == "controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml"
+                ) {
+                    File(internalCemuUserFolder).resolve(assetFile)
+                } else {
+                    dataFolder.resolve(assetFile)
+                }
             outFile.parentFile?.mkdirs()
             assets.open(assetFile)
                 .use { asset -> outFile.outputStream().use { out -> asset.copyTo(out) } }

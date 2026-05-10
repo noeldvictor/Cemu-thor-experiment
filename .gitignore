@@ -47,11 +47,15 @@ bin/keys.txt
 bin/shaderCache/*
 
 bin/controllerProfiles/*
+!bin/controllerProfiles/
+!bin/controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml
 
 !bin/gameProfiles/default/*
 bin/gameProfiles/*
 
 bin/graphicPacks/*
+!bin/graphicPacks/cemuThorBuiltin/
+!bin/graphicPacks/cemuThorBuiltin/**
 
 # Ignore Finder view option files created by OS X
 .DS_Store

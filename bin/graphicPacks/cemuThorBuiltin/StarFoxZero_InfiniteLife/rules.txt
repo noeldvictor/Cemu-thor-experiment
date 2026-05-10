@@ -1,0 +1,6 @@
+[Definition]
+titleIds = 00050000101B0400,00050000101B0500
+name = Infinite Life
+path = "Star Fox Zero/Cheats/Infinite Life"
+description = Experimental Cemu Thor cheat for Star Fox Zero v16. Skips the player damage dispatcher so hits should not reduce life. Disable this if a mission script expects damage to land.
+version = 7

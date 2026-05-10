@@ -94,6 +94,10 @@ Star Fox Zero also hit Android native `signal 7` crashes under laser/explosion l
 
 The built-in Star Fox Zero USA profile is `bin/gameProfiles/default/00050000101b0400.ini`. It uses multi-core recompiler, a modestly larger thread quantum, async compile, accurate barriers on, and GX2DrawDone full sync off as the first per-game performance win. Game profiles can override `asyncCompile`, `accurateBarriers`, and `gx2DrawDoneSync`; runtime code should read these through `ActiveSettings` instead of directly from `GetConfig()` when emulation is active.
 
+Built-in Cemu Thor Star Fox Zero cheat packs live under `bin/graphicPacks/cemuThorBuiltin`. `StarFoxZero_SuperShot` is the validated USA v16 bomb decrement patch, while `StarFoxZero_InfiniteLife` is an experimental USA v16 player-damage dispatcher patch that should stay opt-in until it survives mission testing.
+
+The Star Fox Zero USA profile auto-loads `bin/controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml` on Thor. This profile maps the physical right stick to VPAD motion aiming, A to laser, B to smart bomb, X/Y to boost/brake, L/R to bank/roll, L2 to target view, and R2 to transform/confirm. Keep boost/brake/acrobatic maneuvers on buttons so the right stick stays dedicated to aiming.
+
 If Android reports `Process info.cemu.cemu_thor:EmulationProcess exited cleanly (1)`, it can still be Cemu's fatal handler exiting after writing to `log.txt`. Newer builds preserve the previous run as `/sdcard/Android/data/info.cemu.cemu_thor/files/log.previous.txt` before truncating `log.txt`, so check that file first after an unexpected reset.
 
 ## Existing Cemu Data Copy

@@ -95,6 +95,10 @@ private:
 	bool m_mic_active = false;
 	bool m_screen_active = false;
 	bool m_screen_active_toggle = false;
+	bool m_right_stick_motion = false;
+	float m_right_stick_motion_sensitivity = 1.0f;
+	glm::vec3 m_right_stick_motion_rotation{};
+	std::chrono::high_resolution_clock::time_point m_right_stick_motion_last_update{};
 	uint32be m_last_holdvalue = 0;
 
 	std::chrono::high_resolution_clock::time_point m_last_hold_change{}, m_last_pulse{};
@@ -106,5 +110,7 @@ private:
 
 	void update_touch(VPADStatus_t& status);
 	void update_motion(VPADStatus_t& status);
+	void update_right_stick_motion(VPADStatus_t& status);
+	glm::vec2 get_right_stick_motion_axis() const;
 	glm::ivec2 m_last_touch_position{};
 };

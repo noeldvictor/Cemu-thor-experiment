@@ -1,0 +1,6 @@
+[Definition]
+titleIds = 00050000101B0400,00050000101B0500
+name = Super Shot
+path = "Star Fox Zero/Cheats/Super Shot"
+description = Cemu Thor cheat for Star Fox Zero v16. Keeps smart bomb ammo from decreasing, giving you repeat heavy shots without editing the save.
+version = 7
