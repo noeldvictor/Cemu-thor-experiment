@@ -337,7 +337,7 @@ void LatteOverlay_RenderNotifications(ImVec2& position, ImVec2& pivot, sint32 di
 					ImRotateEnd(0.001f * ticks.time_since_epoch().count());
 					ImGui::SameLine();
 
-					if (s_shader_count_async > 0 && GetConfig().async_compile) // the latter condition is to never show async count when async isn't enabled. Since it can be confusing to the user
+					if (s_shader_count_async > 0 && ActiveSettings::AsyncShaderCompileEnabled()) // the latter condition is to never show async count when async isn't enabled. Since it can be confusing to the user
 					{
 						if(s_shader_count > 1)
 							ImGui::Text("Compiled %d new shaders... (%d async)", s_shader_count, s_shader_count_async);

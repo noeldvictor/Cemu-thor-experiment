@@ -31,6 +31,9 @@ public:
 	[[nodiscard]] const std::optional<GraphicAPI>& GetGraphicsAPI() const { return m_graphics_api; }
 	[[nodiscard]] const AccurateShaderMulOption& GetAccurateShaderMul() const { return m_accurateShaderMul; }
 	void SetAccurateShaderMul(AccurateShaderMulOption accurateShaderMulOption) { m_accurateShaderMul = accurateShaderMulOption; }
+	[[nodiscard]] const std::optional<bool>& GetAsyncCompile() const { return m_asyncCompile; }
+	[[nodiscard]] const std::optional<bool>& GetAccurateBarriers() const { return m_accurateBarriers; }
+	[[nodiscard]] const std::optional<bool>& GetGX2DrawDoneSync() const { return m_gx2DrawDoneSync; }
 #if ENABLE_METAL
 	[[nodiscard]] bool GetShaderFastMath() const { return m_shaderFastMath; }
 	[[nodiscard]] MetalBufferCacheMode GetBufferCacheMode() const { return m_metalBufferCacheMode; }
@@ -84,6 +87,9 @@ public:
 	// graphic settings
 	std::optional<GraphicAPI> m_graphics_api{};
 	AccurateShaderMulOption m_accurateShaderMul = AccurateShaderMulOption::True;
+	std::optional<bool> m_asyncCompile{};
+	std::optional<bool> m_accurateBarriers{};
+	std::optional<bool> m_gx2DrawDoneSync{};
 #if ENABLE_METAL
 	bool m_shaderFastMath = true;
 	MetalBufferCacheMode m_metalBufferCacheMode = MetalBufferCacheMode::Auto;

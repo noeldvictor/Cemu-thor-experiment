@@ -101,7 +101,39 @@ bool ActiveSettings::RenderUpsideDownEnabled()
 
 bool ActiveSettings::WaitForGX2DrawDoneEnabled()
 {
-	return GetConfig().gx2drawdone_sync;
+	return s_runtime_gx2drawdone_sync.value_or(g_current_game_profile->GetGX2DrawDoneSync().value_or(GetConfig().gx2drawdone_sync));
+}
+
+bool ActiveSettings::AsyncShaderCompileEnabled()
+{
+	return s_runtime_async_compile.value_or(g_current_game_profile->GetAsyncCompile().value_or(GetConfig().async_compile));
+}
+
+bool ActiveSettings::AccurateBarriersEnabled()
+{
+	return s_runtime_accurate_barriers.value_or(g_current_game_profile->GetAccurateBarriers().value_or(GetConfig().vk_accurate_barriers));
+}
+
+void ActiveSettings::SetRuntimeGX2DrawDoneSyncOverride(bool enabled)
+{
+	s_runtime_gx2drawdone_sync = enabled;
+}
+
+void ActiveSettings::SetRuntimeAsyncShaderCompileOverride(bool enabled)
+{
+	s_runtime_async_compile = enabled;
+}
+
+void ActiveSettings::SetRuntimeAccurateBarriersOverride(bool enabled)
+{
+	s_runtime_accurate_barriers = enabled;
+}
+
+void ActiveSettings::ResetRuntimeGraphicsOverrides()
+{
+	s_runtime_gx2drawdone_sync.reset();
+	s_runtime_async_compile.reset();
+	s_runtime_accurate_barriers.reset();
 }
 
 GraphicAPI ActiveSettings::GetGraphicsAPI()

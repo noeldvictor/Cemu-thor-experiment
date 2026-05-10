@@ -247,23 +247,24 @@ void InfoLog_PrintActiveSettings()
 	cemuLog_log(LogType::Force, "CPU-Mode: {}{}", fmt::format("{}", ActiveSettings::GetCPUMode()).c_str(), g_current_game_profile->GetCPUMode().has_value() ? " (gameprofile)" : "");
 	cemuLog_log(LogType::Force, "Load shared libraries: {}{}", ActiveSettings::LoadSharedLibrariesEnabled() ? "true" : "false", g_current_game_profile->ShouldLoadSharedLibraries().has_value() ? " (gameprofile)" : "");
 	cemuLog_log(LogType::Force, "Use precompiled shaders: {}{}", fmt::format("{}", ActiveSettings::GetPrecompiledShadersOption()), g_current_game_profile->GetPrecompiledShadersState().has_value() ? " (gameprofile)" : "");
-	cemuLog_log(LogType::Force, "Full sync at GX2DrawDone: {}", ActiveSettings::WaitForGX2DrawDoneEnabled() ? "true" : "false");
+	cemuLog_log(LogType::Force, "Full sync at GX2DrawDone: {}{}", ActiveSettings::WaitForGX2DrawDoneEnabled() ? "true" : "false", g_current_game_profile->GetGX2DrawDoneSync().has_value() ? " (gameprofile)" : "");
 	cemuLog_log(LogType::Force, "Strict shader mul: {}", g_current_game_profile->GetAccurateShaderMul() == AccurateShaderMulOption::True ? "true" : "false");
 	if (ActiveSettings::GetGraphicsAPI() == GraphicAPI::kVulkan)
 	{
-		cemuLog_log(LogType::Force, "Async compile: {}", GetConfig().async_compile.GetValue() ? "true" : "false");
-		if (!GetConfig().vk_accurate_barriers.GetValue())
+		cemuLog_log(LogType::Force, "Async compile: {}{}", ActiveSettings::AsyncShaderCompileEnabled() ? "true" : "false", g_current_game_profile->GetAsyncCompile().has_value() ? " (gameprofile)" : "");
+		cemuLog_log(LogType::Force, "Accurate barriers: {}{}", ActiveSettings::AccurateBarriersEnabled() ? "true" : "false", g_current_game_profile->GetAccurateBarriers().has_value() ? " (gameprofile)" : "");
+		if (!ActiveSettings::AccurateBarriersEnabled())
 			cemuLog_log(LogType::Force, "Accurate barriers are disabled!");
 	}
 #if ENABLE_METAL
 	else if (ActiveSettings::GetGraphicsAPI() == GraphicAPI::kMetal)
 	{
-	    cemuLog_log(LogType::Force, "Async compile: {}", GetConfig().async_compile.GetValue() ? "true" : "false");
+	    cemuLog_log(LogType::Force, "Async compile: {}{}", ActiveSettings::AsyncShaderCompileEnabled() ? "true" : "false", g_current_game_profile->GetAsyncCompile().has_value() ? " (gameprofile)" : "");
 	    cemuLog_log(LogType::Force, "Force mesh shaders: {}", GetConfig().force_mesh_shaders.GetValue() ? "true" : "false");
 		cemuLog_log(LogType::Force, "Fast math: {}", g_current_game_profile->GetShaderFastMath() ? "true" : "false");
 		cemuLog_log(LogType::Force, "Buffer cache type: {}", g_current_game_profile->GetBufferCacheMode());
 		cemuLog_log(LogType::Force, "Position invariance: {}", g_current_game_profile->GetPositionInvariance());
-		if (!GetConfig().vk_accurate_barriers.GetValue())
+		if (!ActiveSettings::AccurateBarriersEnabled())
 			cemuLog_log(LogType::Force, "Accurate barriers are disabled!");
 	}
 #endif

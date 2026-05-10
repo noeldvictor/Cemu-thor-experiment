@@ -170,6 +170,7 @@ void gameProfile_load()
 {
 	g_current_game_profile->ResetOptional(); // reset with global values as optional
 	g_current_game_profile->Load(CafeSystem::GetForegroundTitleId());
+	ActiveSettings::ResetRuntimeGraphicsOverrides();
 
 	// apply some settings immediately
 	ppcThreadQuantum = g_current_game_profile->GetThreadQuantum();
@@ -226,6 +227,9 @@ bool GameProfile::Load(uint64_t title_id)
 				m_graphics_api = (GraphicAPI)graphicsApi.value;
 
 			gameProfile_loadEnumOption(iniParser, "accurateShaderMul", m_accurateShaderMul);
+			gameProfile_loadBooleanOption2(iniParser, "asyncCompile", m_asyncCompile);
+			gameProfile_loadBooleanOption2(iniParser, "accurateBarriers", m_accurateBarriers);
+			gameProfile_loadBooleanOption2(iniParser, "gx2DrawDoneSync", m_gx2DrawDoneSync);
 #if ENABLE_METAL
 			gameProfile_loadBooleanOption2(iniParser, "shaderFastMath", m_shaderFastMath);
 			gameProfile_loadEnumOption(iniParser, "metalBufferCacheMode2", m_metalBufferCacheMode);
@@ -322,6 +326,9 @@ void GameProfile::Save(uint64_t title_id)
 
 	fs->writeLine("[Graphics]");
 	WRITE_ENTRY(accurateShaderMul);
+	WRITE_OPTIONAL_ENTRY(asyncCompile);
+	WRITE_OPTIONAL_ENTRY(accurateBarriers);
+	WRITE_OPTIONAL_ENTRY(gx2DrawDoneSync);
 #if ENABLE_METAL
 	WRITE_ENTRY(shaderFastMath);
 	WRITE_ENTRY_NUMBERED(metalBufferCacheMode, 2);
@@ -365,6 +372,9 @@ void GameProfile::ResetOptional()
 
 	// graphic settings
 	m_accurateShaderMul = AccurateShaderMulOption::True;
+	m_asyncCompile.reset();
+	m_accurateBarriers.reset();
+	m_gx2DrawDoneSync.reset();
 #if ENABLE_METAL
 	m_shaderFastMath = true;
 	m_metalBufferCacheMode = MetalBufferCacheMode::Auto;
@@ -390,6 +400,9 @@ void GameProfile::Reset()
 
 	// graphic settings
 	m_accurateShaderMul = AccurateShaderMulOption::True;
+	m_asyncCompile.reset();
+	m_accurateBarriers.reset();
+	m_gx2DrawDoneSync.reset();
 #if ENABLE_METAL
 	m_shaderFastMath = true;
 	m_metalBufferCacheMode = MetalBufferCacheMode::Auto;

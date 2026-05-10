@@ -110,6 +110,12 @@ public:
 	[[nodiscard]] static PrecompiledShaderOption GetPrecompiledShadersOption();
 	[[nodiscard]] static bool RenderUpsideDownEnabled();
 	[[nodiscard]] static bool WaitForGX2DrawDoneEnabled();
+	[[nodiscard]] static bool AsyncShaderCompileEnabled();
+	[[nodiscard]] static bool AccurateBarriersEnabled();
+	static void SetRuntimeGX2DrawDoneSyncOverride(bool enabled);
+	static void SetRuntimeAsyncShaderCompileOverride(bool enabled);
+	static void SetRuntimeAccurateBarriersOverride(bool enabled);
+	static void ResetRuntimeGraphicsOverrides();
 	[[nodiscard]] static GraphicAPI GetGraphicsAPI();
 
 	// gamma
@@ -156,5 +162,8 @@ private:
 	inline static bool s_audio_aux_only = false;
 
 	inline static bool s_has_required_online_files = false;
+	inline static std::optional<bool> s_runtime_gx2drawdone_sync{};
+	inline static std::optional<bool> s_runtime_async_compile{};
+	inline static std::optional<bool> s_runtime_accurate_barriers{};
 };
 

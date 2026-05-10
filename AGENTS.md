@@ -92,6 +92,8 @@ If the game is slow or exits cleanly with status 1, check `/sdcard/Android/data/
 
 Star Fox Zero also hit Android native `signal 7` crashes under laser/explosion load. One crash path symbolicated around texture-cache cleanup, so the Android texture cleanup scanner now snapshots the texture list and validates that entries are still registered before dereferencing them. The later reproducible shooting crash was a `SIGBUS` alignment fault in the HLE/coreinit atomic path: do not cast emulated Wii U RAM to host `std::atomic<T>` on Android. Use locked `memory_readU32/U64` and `memory_writeU32/U64` helpers instead, and keep fixed-width guest-memory helpers `memcpy`-based so ARM never performs under-aligned host loads/stores against guest memory. Do not disable `LatteTC_HasTextureChanged()` on Android as a crash workaround; it causes lighting/texture flicker. Keep the texture hash scan enabled and alignment-safe.
 
+The built-in Star Fox Zero USA profile is `bin/gameProfiles/default/00050000101b0400.ini`. It uses multi-core recompiler, a modestly larger thread quantum, async compile, accurate barriers on, and GX2DrawDone full sync off as the first per-game performance win. Game profiles can override `asyncCompile`, `accurateBarriers`, and `gx2DrawDoneSync`; runtime code should read these through `ActiveSettings` instead of directly from `GetConfig()` when emulation is active.
+
 If Android reports `Process info.cemu.cemu_thor:EmulationProcess exited cleanly (1)`, it can still be Cemu's fatal handler exiting after writing to `log.txt`. Newer builds preserve the previous run as `/sdcard/Android/data/info.cemu.cemu_thor/files/log.previous.txt` before truncating `log.txt`, so check that file first after an unexpected reset.
 
 ## Existing Cemu Data Copy

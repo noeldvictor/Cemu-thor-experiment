@@ -1,5 +1,6 @@
 #include "JNIUtils.h"
 #include "audio/IAudioAPI.h"
+#include "config/ActiveSettings.h"
 #include "config/CemuConfig.h"
 #include "config/NetworkSettings.h"
 
@@ -198,13 +199,14 @@ Java_info_cemu_cemu_nativeinterface_NativeSettings_getGamesPaths(JNIEnv* env, [[
 extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeSettings_getAsyncShaderCompile([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
 {
-	return GetConfig().async_compile;
+	return ActiveSettings::AsyncShaderCompileEnabled();
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeSettings_setAsyncShaderCompile([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean enabled)
 {
 	GetConfig().async_compile = enabled;
+	ActiveSettings::SetRuntimeAsyncShaderCompileOverride(enabled);
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT jint JNICALL
@@ -222,7 +224,7 @@ Java_info_cemu_cemu_nativeinterface_NativeSettings_setVsyncMode([[maybe_unused]]
 extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeSettings_getAccurateBarriers([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
 {
-	return GetConfig().vk_accurate_barriers;
+	return ActiveSettings::AccurateBarriersEnabled();
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
@@ -265,18 +267,20 @@ extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeSettings_setAccurateBarriers([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean enabled)
 {
 	GetConfig().vk_accurate_barriers = enabled;
+	ActiveSettings::SetRuntimeAccurateBarriersOverride(enabled);
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeSettings_getGX2DrawDoneSync([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
 {
-	return GetConfig().gx2drawdone_sync;
+	return ActiveSettings::WaitForGX2DrawDoneEnabled();
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeSettings_setGX2DrawDoneSync([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean enabled)
 {
 	GetConfig().gx2drawdone_sync = enabled;
+	ActiveSettings::SetRuntimeGX2DrawDoneSyncOverride(enabled);
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL

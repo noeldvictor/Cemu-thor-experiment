@@ -355,7 +355,10 @@ class EmulationViewModel(
             .fold(
                 onSuccess = { result ->
                     when (result) {
-                        PrepareTitleResult.SUCCESSFUL -> Success(Unit)
+                        PrepareTitleResult.SUCCESSFUL -> {
+                            refreshPerformanceStateFromNative()
+                            Success(Unit)
+                        }
                         PrepareTitleResult.ERROR_GAME_BASE_FILES_NOT_FOUND -> Error(NativeError.GameFilesNotFoundError)
                         PrepareTitleResult.ERROR_NO_DISC_KEY -> Error(NativeError.NoDiscKeysError)
                         PrepareTitleResult.ERROR_NO_TITLE_TIK -> Error(NativeError.NoTitleTikError)
@@ -364,6 +367,16 @@ class EmulationViewModel(
                 },
                 onError = { Error(NativeError.UnknownTilePrepareError(launchPath)) }
             )
+
+    private fun refreshPerformanceStateFromNative() {
+        _sideMenuState.update {
+            it.copy(
+                isAsyncShaderCompileEnabled = NativeSettings.getAsyncShaderCompile(),
+                skipGX2DrawDoneSync = !NativeSettings.getGX2DrawDoneSync(),
+                skipAccurateBarriers = !NativeSettings.getAccurateBarriers(),
+            )
+        }
+    }
 
     private suspend fun launchTitle() =
         attemptWithContext(Dispatchers.IO) { NativeEmulation.launchTitle() }

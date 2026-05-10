@@ -125,7 +125,7 @@ PipelineObject* MetalPipelineCache::GetRenderPipelineState(const LatteFetchShade
     compiler->InitFromState(fetchShader, vertexShader, geometryShader, pixelShader, lastUsedAttachmentsInfo, activeAttachmentsInfo, lcr);
 
     bool allowAsyncCompile = false;
-    if (GetConfig().async_compile)
+    if (ActiveSettings::AsyncShaderCompileEnabled())
 		allowAsyncCompile = IsAsyncPipelineAllowed(activeAttachmentsInfo, extend, indexCount);
 
 	if (allowAsyncCompile)

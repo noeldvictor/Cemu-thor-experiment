@@ -21,6 +21,7 @@
 #include "Cemu/Logging/CemuLogging.h"
 #include "Cafe/HW/Latte/Core/FetchShader.h"
 #include "Cafe/HW/Latte/Core/LatteConst.h"
+#include "config/ActiveSettings.h"
 #include "config/CemuConfig.h"
 
 #define IMGUI_IMPL_METAL_CPP
@@ -1111,7 +1112,7 @@ void MetalRenderer::draw_execute(uint32 baseVertex, uint32 baseInstance, uint32 
 	}
 
 	// Check if we need to end the render pass
-	if (!m_state.m_isFirstDrawInRenderPass && (GetConfig().vk_accurate_barriers || neverSkipAccurateBarrier))
+	if (!m_state.m_isFirstDrawInRenderPass && (ActiveSettings::AccurateBarriersEnabled() || neverSkipAccurateBarrier))
 	{
     	// Fragment shader is most likely to require a render pass flush, so check for it first
     	bool endRenderPass = CheckIfRenderPassNeedsFlush(pixelShader);
