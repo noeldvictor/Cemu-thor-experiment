@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.hardware.display.DisplayManager
 import android.view.Display
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
@@ -894,7 +895,12 @@ private fun EmulationSurface(
                         }
                     }
 
-                    override fun surfaceCreated(holder: SurfaceHolder) {}
+                    override fun surfaceCreated(holder: SurfaceHolder) {
+                        holder.surface.setFrameRate(
+                            60f,
+                            Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+                        )
+                    }
 
                     override fun surfaceDestroyed(holder: SurfaceHolder) {}
                 })

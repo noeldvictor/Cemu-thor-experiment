@@ -181,6 +181,7 @@ void gameProfile_load()
 
 bool GameProfile::Load(uint64_t title_id)
 {
+	m_title_id = title_id;
 	auto gameProfilePath = ActiveSettings::GetConfigPath("gameProfiles/{:016x}.ini", title_id);
 
 	std::optional<std::vector<uint8>> profileContents = FileStream::LoadIntoMemory(gameProfilePath);
@@ -364,6 +365,9 @@ void GameProfile::Save(uint64_t title_id)
 
 void GameProfile::ResetOptional()
 {
+	m_title_id = 0;
+	m_is_loaded = false;
+	m_is_default = true;
 	m_gameName.reset();
 
 	// general settings
@@ -371,6 +375,7 @@ void GameProfile::ResetOptional()
 	m_startWithPadView = false;
 
 	// graphic settings
+	m_graphics_api.reset();
 	m_accurateShaderMul = AccurateShaderMulOption::True;
 	m_asyncCompile.reset();
 	m_accurateBarriers.reset();
@@ -380,6 +385,7 @@ void GameProfile::ResetOptional()
 	m_metalBufferCacheMode = MetalBufferCacheMode::Auto;
 	m_positionInvariance = PositionInvariance::Auto;
 #endif
+	m_precompiledShaders.reset();
 	// cpu settings
 	m_threadQuantum = kThreadQuantumDefault;
 	m_cpuMode.reset(); // CPUModeOption::kSingleCoreRecompiler;
@@ -388,10 +394,17 @@ void GameProfile::ResetOptional()
 	// controller settings
 	for (auto& profile : m_controllerProfile)
 		profile.reset();
+
+#if BOOST_PLAT_ANDROID
+	m_driverSetting = {};
+#endif
 }
 
 void GameProfile::Reset()
 {
+	m_title_id = 0;
+	m_is_loaded = false;
+	m_is_default = true;
 	m_gameName.reset();
 
 	// general settings
@@ -399,6 +412,7 @@ void GameProfile::Reset()
 	m_startWithPadView = false;
 
 	// graphic settings
+	m_graphics_api.reset();
 	m_accurateShaderMul = AccurateShaderMulOption::True;
 	m_asyncCompile.reset();
 	m_accurateBarriers.reset();
@@ -417,4 +431,8 @@ void GameProfile::Reset()
 	// controller settings
 	for (auto& profile : m_controllerProfile)
 		profile.reset();
+
+#if BOOST_PLAT_ANDROID
+	m_driverSetting = {};
+#endif
 }

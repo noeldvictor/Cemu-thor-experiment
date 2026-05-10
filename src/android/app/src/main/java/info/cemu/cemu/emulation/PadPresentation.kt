@@ -4,6 +4,7 @@ import android.app.Presentation
 import android.content.Context
 import android.os.Bundle
 import android.view.Display
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup
@@ -39,6 +40,23 @@ class PadPresentation(
 
             holder.setFixedSize(surfaceWidth, surfaceHeight)
             holder.addCallback(holderCallback)
+            holder.addCallback(object : SurfaceHolder.Callback {
+                override fun surfaceCreated(holder: SurfaceHolder) {
+                    holder.surface.setFrameRate(
+                        60f,
+                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+                    )
+                }
+
+                override fun surfaceChanged(
+                    holder: SurfaceHolder,
+                    format: Int,
+                    width: Int,
+                    height: Int,
+                ) = Unit
+
+                override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
+            })
             setOnTouchListener(touchListener)
         }
 

@@ -46,6 +46,14 @@ Android is Vulkan-only in this branch: `src/android/app/build.gradle.kts` passes
 
 On Windows, prefer building from a path without spaces. A junction such as `C:\Users\leanerdesigner\Documents\Cemu_thor_build` pointing to the checkout works; vcpkg/autotools packages can fail when the physical build path contains spaces.
 
+## Snapdragon / Adreno Performance Direction
+
+Treat the AYN Thor as the main test device, but avoid hard-coding Thor-only display IDs, panel modes, refresh-rate quirks, model strings, or AYN control-center behavior into core emulator paths. Prefer general Snapdragon 8 Gen 2 / Adreno 740 / Android Vulkan improvements that would also make sense on other Adreno 7xx devices.
+
+Good optimization targets are Vulkan/Turnip driver selection, shader compilation and cache behavior, accurate barrier and GX2DrawDone sync policy, dual-surface rendering cost, release-build profiling, thermal/GPU/CPU telemetry, and Android surface hints that describe fixed-rate emulator content. Do not bury device-specific behavior in general code; if a Thor-only workaround is truly needed, put it behind an explicit opt-in setting, document the evidence, and keep the stable default upstream-friendly.
+
+Default to correctness and stability. Risky performance toggles must stay off by default, clearly labeled, and preferably session-only from the OSD. Measure changes with Cemu logs, `adb shell dumpsys display`, KGSL counters, and repeatable game scenes before treating them as wins.
+
 ## Device Install
 
 Use `adb devices` to confirm the AYN Thor is connected, then install the APK:
