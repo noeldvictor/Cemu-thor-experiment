@@ -8,6 +8,14 @@
 
 std::unordered_set<LatteTexture*> g_allTextures;
 
+namespace
+{
+	bool LatteTC_IsRegisteredTextureLocked(LatteTexture* tex)
+	{
+		return tex && g_allTextures.find(tex) != g_allTextures.end();
+	}
+}
+
 void LatteTC_Init()
 {
 	std::lock_guard lock(LatteTexture_GetRegistryMutex());
@@ -29,7 +37,7 @@ void LatteTC_UnregisterTexture(LatteTexture* tex)
 bool LatteTC_IsRegisteredTexture(LatteTexture* tex)
 {
 	std::lock_guard lock(LatteTexture_GetRegistryMutex());
-	return tex && g_allTextures.find(tex) != g_allTextures.end();
+	return LatteTC_IsRegisteredTextureLocked(tex);
 }
 
 template<typename T>
@@ -229,9 +237,12 @@ bool LatteTC_HasTextureChanged(LatteTexture* hostTexture, bool force)
 {
 #if defined(__ANDROID__)
 	std::lock_guard lock(LatteTexture_GetRegistryMutex());
-#endif
+	if (!LatteTC_IsRegisteredTextureLocked(hostTexture))
+		return false;
+#else
 	if (!LatteTC_IsRegisteredTexture(hostTexture))
 		return false;
+#endif
 
 	// Keep the normal texture invalidation path enabled on Android. The hash
 	// scan must stay alignment-safe because guest texture addresses are not
@@ -284,9 +295,12 @@ void LatteTC_ResetTextureChangeTracker(LatteTexture* hostTexture, bool force)
 {
 #if defined(__ANDROID__)
 	std::lock_guard lock(LatteTexture_GetRegistryMutex());
-#endif
+	if (!LatteTC_IsRegisteredTextureLocked(hostTexture))
+		return;
+#else
 	if (!LatteTC_IsRegisteredTexture(hostTexture))
 		return;
+#endif
 
 	if( hostTexture->lastDataUpdateFrameCounter == LatteGPUState.frameCounter && force == false)
 		return;

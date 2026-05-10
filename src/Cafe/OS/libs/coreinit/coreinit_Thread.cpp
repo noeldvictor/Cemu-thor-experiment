@@ -8,6 +8,7 @@
 #include "Cafe/HW/Espresso/Debugger/GDBStub.h"
 #include "Cafe/HW/Espresso/Interpreter/PPCInterpreterInternal.h"
 #include "Cafe/HW/Espresso/Recompiler/PPCRecompiler.h"
+#include "Cafe/Android/AndroidPerformanceHints.h"
 
 #include "util/helpers/Semaphore.h"
 #include "util/helpers/ConcurrentQueue.h"
@@ -1412,12 +1413,13 @@ namespace coreinit
 		}
 	}
 
-#if BOOST_OS_LINUX
+#if BOOST_OS_LINUX || BOOST_PLAT_ANDROID
 	#include <unistd.h>
 	#include <sys/prctl.h>
 
 	std::vector<pid_t> g_schedulerThreadIds;
 	std::mutex g_schedulerThreadIdsLock;
+	std::atomic<size_t> g_expectedSchedulerThreadCount{};
 
 	std::vector<pid_t>& OSGetSchedulerThreadIds()
 	{
@@ -1433,7 +1435,7 @@ namespace coreinit
 
 		enableFlushDenormalsToZero();
 
-#if BOOST_OS_LINUX
+#if BOOST_OS_LINUX || BOOST_PLAT_ANDROID
 		if (g_gdbstub)
 		{
 			// need to allow the GDBStub to attach to our thread
@@ -1442,10 +1444,15 @@ namespace coreinit
 		}
 
 		pid_t tid = gettid();
+		std::vector<pid_t> schedulerThreadIds;
 		{
 			std::lock_guard schedulerThreadIdsLockGuard(g_schedulerThreadIdsLock);
 			g_schedulerThreadIds.emplace_back(tid);
+			schedulerThreadIds = g_schedulerThreadIds;
 		}
+#if BOOST_PLAT_ANDROID
+		AndroidPerformanceHints::UpdateSchedulerThreads(schedulerThreadIds, g_expectedSchedulerThreadCount.load());
+#endif
 #endif
 
 		t_schedulerFiber = Fiber::PrepareCurrentThread();
@@ -1474,6 +1481,9 @@ namespace coreinit
 			return;
 		cemu_assert_debug(numCPUEmulationThreads == 1 || numCPUEmulationThreads == 3);
 		g_isMulticoreMode = numCPUEmulationThreads > 1;
+#if BOOST_OS_LINUX || BOOST_PLAT_ANDROID
+		g_expectedSchedulerThreadCount.store(static_cast<size_t>(numCPUEmulationThreads));
+#endif
 		if (numCPUEmulationThreads == 1)
 			sSchedulerThreads.emplace_back(OSSchedulerCoreEmulationThread, (void*)0);
 		else if (numCPUEmulationThreads == 3)
@@ -1499,7 +1509,11 @@ namespace coreinit
 			threadItr.join();
 		sSchedulerThreads.clear();
 		g_schedulerThreadHandles.clear();
-#if BOOST_OS_LINUX
+#if BOOST_PLAT_ANDROID
+		AndroidPerformanceHints::CloseSchedulerSession();
+#endif
+#if BOOST_OS_LINUX || BOOST_PLAT_ANDROID
+		g_expectedSchedulerThreadCount.store(0);
 		{
 			std::lock_guard schedulerThreadIdsLockGuard(g_schedulerThreadIdsLock);
 			g_schedulerThreadIds.clear();

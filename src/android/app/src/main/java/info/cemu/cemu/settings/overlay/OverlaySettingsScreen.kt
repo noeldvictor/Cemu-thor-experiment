@@ -98,6 +98,12 @@ private fun OverlaySettings() {
         onCheckedChanged = NativeSettings::setOverlayRAMUsageEnabled,
     )
     Toggle(
+        label = tr("Perf details"),
+        description = tr("Frame, wait, submit, render pass, and barrier timing details"),
+        initialCheckedState = NativeSettings::isOverlayPerfStatsEnabled,
+        onCheckedChanged = NativeSettings::setOverlayPerfStatsEnabled,
+    )
+    Toggle(
         label = tr("Debug"),
         description = tr("Displays internal debug information (Vulkan only)"),
         initialCheckedState = NativeSettings::isOverlayDebugEnabled,

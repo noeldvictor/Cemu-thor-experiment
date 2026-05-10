@@ -2,7 +2,10 @@ package info.cemu.cemu.emulation
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.GameManager
+import android.app.GameState
 import android.content.Context
+import android.os.Build
 import android.hardware.display.DisplayManager
 import android.view.Display
 import android.view.Surface
@@ -110,6 +113,7 @@ fun EmulationScreen(
     val mainSurfaceDimensions by viewModel.mainSurfaceDimensions.collectAsState()
     val padSurfaceDimensions by viewModel.padSurfaceDimensions.collectAsState()
     val showStarFoxControllerHelp = remember(gamePath) { isStarFoxZeroLaunch(gamePath) }
+    val context = LocalContext.current
 
 
     fun closeDrawer() {
@@ -140,6 +144,16 @@ fun EmulationScreen(
 
     LaunchedEffect(drawerState.isClosed) {
         setInputListeningEnabled(drawerState.isClosed)
+    }
+
+    LaunchedEffect(isEmulationInitialized) {
+        reportAndroidGameState(context, isGameplay = isEmulationInitialized)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            reportAndroidGameState(context, isGameplay = false, isLoading = false)
+        }
     }
 
     LaunchedEffect(sideMenuState.areScreensSwapped) {
@@ -193,6 +207,18 @@ fun EmulationScreen(
                     onResetInputOverlay = {
                         viewModel.resetInputOverlayLayout()
                         closeDrawer()
+                    },
+                    onResetGuestProfiler = {
+                        NativeEmulation.resetGuestProfiler()
+                        viewModel.updateSideMenuState(sideMenuState.copy(isGuestProfilerEnabled = false))
+                        snackbarHostState.showMessage(scope, tr("Guest profile reset"))
+                    },
+                    onDumpGuestProfiler = {
+                        val dumpPath = NativeEmulation.dumpGuestProfiler()
+                        snackbarHostState.showMessage(
+                            scope,
+                            if (dumpPath.isBlank()) tr("Guest profile dump failed") else tr("Guest profile dumped")
+                        )
                     },
                     onQuit = {
                         showQuitConfirmationDialog = true
@@ -332,6 +358,8 @@ private fun EmulationSideMenuContent(
     onShowEmulatedUSBDevices: () -> Unit,
     onEditInputOverlay: () -> Unit,
     onResetInputOverlay: () -> Unit,
+    onResetGuestProfiler: () -> Unit,
+    onDumpGuestProfiler: () -> Unit,
     onQuit: () -> Unit,
 ) {
     var selectedSection by rememberSaveable { mutableStateOf(SideMenuSection.DISPLAY) }
@@ -401,7 +429,12 @@ private fun EmulationSideMenuContent(
 
             when (selectedSection) {
                 SideMenuSection.DISPLAY -> DisplayMenuContent(sideMenuState, updateState)
-                SideMenuSection.PERFORMANCE -> PerformanceMenuContent(sideMenuState, updateState)
+                SideMenuSection.PERFORMANCE -> PerformanceMenuContent(
+                    sideMenuState = sideMenuState,
+                    updateState = updateState,
+                    onResetGuestProfiler = onResetGuestProfiler,
+                    onDumpGuestProfiler = onDumpGuestProfiler,
+                )
                 SideMenuSection.AUDIO -> AudioMenuContent(sideMenuState, updateState)
                 SideMenuSection.CONTROLS -> ControlsMenuContent(
                     sideMenuState = sideMenuState,
@@ -492,17 +525,49 @@ private fun DisplayMenuContent(
             onCheckedChange = { updateState(sideMenuState.copy(isExternalScreenRotatedLeft = it)) },
             enabled = sideMenuState.isPadOnExternalDisplay,
         )
+
+        Slider(
+            label = tr("PAD render scale"),
+            value = sideMenuState.padRenderScalePercent,
+            valueFrom = PAD_RENDER_SCALE_MIN,
+            valueTo = PAD_RENDER_SCALE_MAX,
+            steps = 1,
+            enabled = sideMenuState.isPadVisible && sideMenuState.isPadOnExternalDisplay,
+            onValueChange = {
+                updateState(
+                    sideMenuState.copy(
+                        padRenderScalePercent = normalizePadRenderScalePercent(it)
+                    )
+                )
+            },
+            labelFormatter = { "$it%" },
+        )
 }
 
 @Composable
 private fun PerformanceMenuContent(
     sideMenuState: SideMenuState,
     updateState: (SideMenuState) -> Unit,
+    onResetGuestProfiler: () -> Unit,
+    onDumpGuestProfiler: () -> Unit,
 ) {
         CheckboxItem(
             label = tr("Show FPS"),
             checked = sideMenuState.isFPSOverlayVisible,
-            onCheckedChange = { updateState(sideMenuState.copy(isFPSOverlayVisible = it)) },
+            onCheckedChange = {
+                updateState(
+                    sideMenuState.copy(
+                        isFPSOverlayVisible = it,
+                        isPerfOverlayVisible = if (it) false else sideMenuState.isPerfOverlayVisible,
+                    )
+                )
+            },
+        )
+
+        CheckboxItem(
+            label = tr("Show perf details"),
+            checked = sideMenuState.isPerfOverlayVisible,
+            onCheckedChange = { updateState(sideMenuState.copy(isPerfOverlayVisible = it)) },
         )
 
         CheckboxItem(
@@ -521,6 +586,24 @@ private fun PerformanceMenuContent(
             label = tr("Skip accurate barriers (session)"),
             checked = sideMenuState.skipAccurateBarriers,
             onCheckedChange = { updateState(sideMenuState.copy(skipAccurateBarriers = it)) },
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+        CheckboxItem(
+            label = tr("Profile guest PPC blocks"),
+            checked = sideMenuState.isGuestProfilerEnabled,
+            onCheckedChange = { updateState(sideMenuState.copy(isGuestProfilerEnabled = it)) },
+        )
+
+        TextButtonItem(
+            label = tr("Reset guest profile"),
+            onClick = onResetGuestProfiler,
+        )
+
+        TextButtonItem(
+            label = tr("Dump guest profile"),
+            onClick = onDumpGuestProfiler,
         )
 }
 
@@ -782,7 +865,13 @@ private fun EmulationSurfaces(
         )
     }
 
-    DisposableEffect(activity, padDisplay, usePadPresentation, sideMenuState.isExternalScreenRotatedLeft) {
+    DisposableEffect(
+        activity,
+        padDisplay,
+        usePadPresentation,
+        sideMenuState.isExternalScreenRotatedLeft,
+        sideMenuState.padRenderScalePercent,
+    ) {
         val activityNonNull = activity ?: return@DisposableEffect onDispose {}
         if (!usePadPresentation)
             return@DisposableEffect onDispose {}
@@ -794,6 +883,7 @@ private fun EmulationSurfaces(
             context = activityNonNull,
             display = padDisplayNonNull,
             rotateLeft = sideMenuState.isExternalScreenRotatedLeft,
+            renderScalePercent = sideMenuState.padRenderScalePercent,
             holderCallback = padHolderCallback,
             touchListener = padPresentationTouchListener,
         )
@@ -896,10 +986,7 @@ private fun EmulationSurface(
                     }
 
                     override fun surfaceCreated(holder: SurfaceHolder) {
-                        holder.surface.setFrameRate(
-                            60f,
-                            Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
-                        )
+                        holder.surface.setFrameRate(60f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
                     }
 
                     override fun surfaceDestroyed(holder: SurfaceHolder) {}
@@ -946,6 +1033,31 @@ private fun rememberPadDisplay(activity: Activity): Display? {
 
     return padDisplay
 }
+
+private fun reportAndroidGameState(
+    context: Context,
+    isGameplay: Boolean,
+    isLoading: Boolean = !isGameplay,
+) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        return
+    }
+
+    val gameManager = context.getSystemService(GameManager::class.java) ?: return
+    val mode =
+        if (isGameplay) GameState.MODE_GAMEPLAY_UNINTERRUPTIBLE else GameState.MODE_NONE
+    gameManager.setGameState(GameState(isLoading, mode))
+}
+
+private const val PAD_RENDER_SCALE_MIN = 50
+private const val PAD_RENDER_SCALE_MAX = 100
+
+private fun normalizePadRenderScalePercent(value: Int): Int =
+    when {
+        value <= 62 -> 50
+        value <= 87 -> 75
+        else -> 100
+    }
 
 @Composable
 private fun EmulationQuitConfirmationDialog(onQuit: () -> Unit, onDismiss: () -> Unit) {

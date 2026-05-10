@@ -1,6 +1,7 @@
 #include "AndroidFilesystemCallbacks.h"
 #include "AndroidInputHelpers.h"
 #include "Cafe/CafeSystem.h"
+#include "Cafe/HW/Espresso/Recompiler/PPCRecompilerProfiler.h"
 #include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/HW/Latte/Core/LatteOverlay.h"
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h"
@@ -237,6 +238,25 @@ extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeEmulation_setExternalScreenRotatedLeft([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean rotated)
 {
 	WindowSystem::GetWindowInfo().external_screen_rotated_left = rotated;
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_setGuestProfilerEnabled([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean enabled)
+{
+	PPCRecompilerProfiler::SetHotBlockProfilerEnabled(enabled);
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_resetGuestProfiler([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
+{
+	PPCRecompilerProfiler::ResetHotBlockProfiler();
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT jstring JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_dumpGuestProfiler(JNIEnv* env, [[maybe_unused]] jclass clazz)
+{
+	const auto path = PPCRecompilerProfiler::DumpHotBlockProfiler();
+	return env->NewStringUTF(path.c_str());
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT void JNICALL

@@ -19,6 +19,7 @@ void LattePerformanceMonitor_frameEnd()
 	performanceMonitor.gpuTime_dcStageMRT.frameFinished();
 	performanceMonitor.gpuTime_dcStageDrawcallAPI.frameFinished();
 	performanceMonitor.gpuTime_waitForAsync.frameFinished();
+	performanceMonitor.gpuTime_vkQueueWait.frameFinished();
 
 	uint32 elapsedTime = GetTickCount() - performanceMonitor.cycle[performanceMonitor.cycleIndex].lastUpdate;
 	if (elapsedTime >= 1000)
@@ -120,4 +121,5 @@ void LattePerformanceMonitor_frameBegin()
 {
 	performanceMonitor.vk.numDrawBarriersPerFrame.reset();
 	performanceMonitor.vk.numBeginRenderpassPerFrame.reset();
+	performanceMonitor.vk.numCommandBufferSubmitsPerFrame.reset();
 }

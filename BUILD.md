@@ -1,5 +1,13 @@
 # Build Instructions
 
+This fork is **Cemu for AYN Thor Experiment**. The desktop instructions are inherited from upstream Cemu and remain useful for native desktop builds, but Android release builds from `src/android` are the main path for this repo.
+
+For this fork, prefer the SSH remote:
+
+```sh
+git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git
+```
+
 ## Table of Contents
 
 - [Windows](#windows)
@@ -36,7 +44,7 @@ Prerequisites:
 
 Instructions for Visual Studio 2022:
 
-1. Run `git clone --recursive https://github.com/cemu-project/Cemu`
+1. Run `git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git`
 2. Open the newly created Cemu directory in Visual Studio using the "Open a local folder" option
 3. In the menu select Project -> Configure CMake. Wait until it is done, this may take a long time
 4. You can now build, run and debug Cemu
@@ -68,7 +76,7 @@ At Step 3 in [Build Cemu using cmake and clang](#build-cemu-using-cmake-and-clan
 #### CMake and Clang
 
 ```
-git clone --recursive https://github.com/cemu-project/Cemu
+git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git
 cd Cemu
 cmake -S . -B build -DCMAKE_BUILD_TYPE=release -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -G Ninja
 cmake --build build
@@ -82,7 +90,7 @@ If you are building using GCC, make sure you have g++ installed:
 - Installation for Fedora and derivatives: `sudo dnf install gcc-c++`
 
 ```
-git clone --recursive https://github.com/cemu-project/Cemu
+git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git
 cd Cemu
 cmake -S . -B build -DCMAKE_BUILD_TYPE=release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -G Ninja
 cmake --build build
@@ -91,7 +99,7 @@ cmake --build build
 #### Debug Build
 
 ```
-git clone --recursive https://github.com/cemu-project/Cemu
+git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git
 cd Cemu
 cmake -S . -B build -DCMAKE_BUILD_TYPE=debug -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -G Ninja
 cmake --build build
@@ -130,7 +138,7 @@ This section refers to running `cmake -S...` (truncated).
 * If you are getting a random error, read the [package-name-and-platform]-out.log and [package-name-and-platform]-err.log for the actual reason to see if you might be lacking the headers from a dependency.
 
 
-If you are getting a different error than any of the errors listed above, you may either open an issue in this repo or try using [GCC](#gcc). Make sure your standard library and compilers are updated since Cemu uses a lot of modern features!
+If you are getting a different error than any of the errors listed above, try using [GCC](#gcc), compare against upstream Cemu, or fork and patch it locally. This experiment repo is not operated as a support queue.
 
 
 ##### Building Errors
@@ -144,7 +152,7 @@ This section refers to running `cmake --build build`.
 * `undefined libdecor_xx`
    * You are likely experiencing an issue with sdl2 package that comes with vcpkg. Delete sdl2 from vcpkg.json in source file and recompile.
 
-If you are getting a different error than any of the errors listed above, you may either open an issue in this repo or try using [GCC](#gcc). Make sure your standard library and compilers are updated since Cemu uses a lot of modern features!
+If you are getting a different error than any of the errors listed above, try using [GCC](#gcc), compare against upstream Cemu, or fork and patch it locally. This experiment repo is not operated as a support queue.
 
 ## macOS
 
@@ -184,7 +192,7 @@ Alternatively, you can use the non-privateapi version of MoltenVK, but you may e
 
 ### Build Cemu using CMake
 
-1. `git clone --recursive https://github.com/cemu-project/Cemu`
+1. `git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git`
 2. `cd Cemu`
 3. `cmake -S . -B build -DCMAKE_BUILD_TYPE=release -G Ninja`
 4. `cmake --build build`
@@ -196,14 +204,23 @@ Alternatively, you can use the non-privateapi version of MoltenVK, but you may e
    - **On an Intel Mac:** `-DCMAKE_MAKE_PROGRAM=/usr/local/bin/ninja`
 
 ## Android
+
+Android is the primary target for this fork. Use release builds for performance testing on AYN Thor; debug builds can be much slower and should mostly be used for UI/dev checks.
+
 Prerequisites:
 - git
 - [Android studio](https://developer.android.com/studio)
 
 Instructions:
-1. Run `git clone --recursive https://github.com/cemu-project/Cemu`
+1. Run `git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git`
 2. Open the project located in `src/android` in Android Studio
-3. Click Build > Make Project
+3. Build the `app` release variant, or run from `src/android`:
+
+```sh
+./gradlew.bat :app:assembleRelease
+```
+
+The release APK installs as `info.cemu.cemu_thor`; debug installs separately as `info.cemu.cemu_thor.debug`. Current Thor Base/Pro/Max performance work assumes Snapdragon 8 Gen 2 / Adreno 740 and Vulkan.
 
 ## FreeBSD
 
@@ -222,7 +239,7 @@ Or a higher version as desired.
 ### Build Cemu on BSD with CMake
 
 ```
-git clone --recursive https://github.com/cemu-project/Cemu
+git clone --recursive git@github.com:noeldvictor/Cemu-thor-experiment.git
 cd Cemu
 cmake -B build -DCMAKE_BUILD_TYPE=release -DENABLE_BLUEZ=OFF -DENABLE_DISCORD_RPC=OFF -DENABLE_FERAL_GAMEMODE=OFF -DENABLE_HIDAPI=OFF -DENABLE_VCPKG=OFF -G Ninja
 cmake --build build

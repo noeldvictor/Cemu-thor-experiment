@@ -67,6 +67,8 @@ add_library(CemuCafe
   HW/Espresso/Recompiler/PPCFunctionBoundaryTracker.h
   HW/Espresso/Recompiler/PPCRecompiler.cpp
   HW/Espresso/Recompiler/PPCRecompiler.h
+  HW/Espresso/Recompiler/PPCRecompilerProfiler.cpp
+  HW/Espresso/Recompiler/PPCRecompilerProfiler.h
   HW/Espresso/Recompiler/IML/IML.h
   HW/Espresso/Recompiler/IML/IMLSegment.cpp
   HW/Espresso/Recompiler/IML/IMLSegment.h
@@ -607,9 +609,14 @@ endif()
 
 if(ANDROID)
   target_sources(CemuCafe PRIVATE
+    Android/AndroidPerformanceHints.cpp
+    Android/AndroidPerformanceHints.h
     Filesystem/fscDeviceAndroidSAF.cpp
     Filesystem/fscDeviceAndroidSAF.h
   )
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64)|(AARCH64)")
+    target_compile_options(CemuCafe PRIVATE $<$<CONFIG:Release,RelWithDebInfo>:-O3>)
+  endif()
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64)|(AARCH64)")
     target_link_libraries(CemuCafe PRIVATE adrenotools)
   endif()

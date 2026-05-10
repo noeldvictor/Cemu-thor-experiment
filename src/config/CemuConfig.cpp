@@ -123,7 +123,11 @@ XMLConfigParser CemuConfig::Load(XMLConfigParser& parser)
 
 	// graphics
 	auto graphic = parser.get("Graphic");
+#if BOOST_PLAT_ANDROID
+	graphic_api = graphic.get("api", kVulkan);
+#else
 	graphic_api = graphic.get("api", kOpenGL);
+#endif
 	graphic.get("device", legacy_graphic_device_uuid);
 	if (graphic.get("vkDevice").valid())
 		graphic.get("vkDevice", vk_graphic_device_uuid);
@@ -160,6 +164,7 @@ XMLConfigParser CemuConfig::Load(XMLConfigParser& parser)
 		overlay.cpu_per_core_usage = overlay_node.get("CPUPerCoreUsage", false);
 		overlay.ram_usage = overlay_node.get("RAMUsage", false);
 		overlay.vram_usage = overlay_node.get("VRAMUsage", false);
+		overlay.perf_stats = overlay_node.get("PerfStats", false);
 		overlay.debug = overlay_node.get("Debug", false);
 
 		notification.controller_profiles = overlay_node.get("ControllerProfiles", true);
@@ -393,6 +398,7 @@ XMLConfigParser CemuConfig::Save(XMLConfigParser& parser)
 	overlay_node.set("CPUPerCoreUsage", overlay.cpu_per_core_usage);
 	overlay_node.set("RAMUsage", overlay.ram_usage);
 	overlay_node.set("VRAMUsage", overlay.vram_usage);
+	overlay_node.set("PerfStats", overlay.perf_stats);
 	overlay_node.set("Debug", overlay.debug);
 
 	auto notification_node = graphic.set("Notification");

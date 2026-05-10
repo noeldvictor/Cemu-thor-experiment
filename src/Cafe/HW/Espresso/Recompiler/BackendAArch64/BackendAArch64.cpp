@@ -9,6 +9,7 @@
 #include <cstddef>
 
 #include "../PPCRecompiler.h"
+#include "../PPCRecompilerProfiler.h"
 #include "Common/precompiled.h"
 #include "Common/cpu_features.h"
 #include "HW/Espresso/Interpreter/PPCInterpreterInternal.h"
@@ -156,6 +157,7 @@ struct AArch64GenContext_t : CodeGenerator
 	void cjump(IMLInstruction* imlInstruction, IMLSegment* imlSegment);
 	void jump(IMLSegment* imlSegment);
 	void conditionalJumpCycleCheck(IMLSegment* imlSegment);
+	void profileEnterableSegment(uint32 ppcAddress);
 
 	static constexpr size_t MAX_JUMP_INSTR_COUNT = 2;
 	std::list<std::pair<size_t, JumpInfo>> jumps;
@@ -1445,6 +1447,29 @@ void AArch64GenContext_t::call_imm(IMLInstruction* imlInstruction)
 	ldr(x30, AdrPostImm(sp, 16));
 }
 
+void AArch64GenContext_t::profileEnterableSegment(uint32 ppcAddress)
+{
+	Label profilerDisabled;
+	mov(TEMP_GPR1.XReg, reinterpret_cast<uint64>(&PPCRecompilerProfiler::g_hotBlockProfilerEnabled));
+	ldr(TEMP_GPR1.WReg, AdrUimm(TEMP_GPR1.XReg, 0));
+	cbz(TEMP_GPR1.WReg, profilerDisabled);
+
+	mov(TEMP_GPR1.XReg, reinterpret_cast<uint64>(&PPCRecompilerProfiler::g_hotBlockProfilerSampleCounter));
+	ldr(TEMP_GPR2.WReg, AdrUimm(TEMP_GPR1.XReg, 0));
+	add(TEMP_GPR2.WReg, TEMP_GPR2.WReg, 1);
+	str(TEMP_GPR2.WReg, AdrUimm(TEMP_GPR1.XReg, 0));
+	tst(TEMP_GPR2.WReg, 0x3f);
+	bne(profilerDisabled);
+
+	str(x30, AdrPreImm(sp, -16));
+	mov(w0, ppcAddress);
+	mov(TEMP_GPR1.XReg, reinterpret_cast<uint64>(PPCRecompilerProfiler::RecordHotBlock));
+	blr(TEMP_GPR1.XReg);
+	ldr(x30, AdrPostImm(sp, 16));
+
+	L(profilerDisabled);
+}
+
 bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, struct ppcImlGenContext_t* ppcImlGenContext)
 {
 	AArch64Allocator allocator;
@@ -1459,6 +1484,8 @@ bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, 
 		segIt->x64Offset = aarch64GenContext.getSize();
 
 		aarch64GenContext.storeSegmentStart(segIt);
+		if (segIt->isEnterable)
+			aarch64GenContext.profileEnterableSegment(segIt->enterPPCAddress);
 
 		for (size_t i = 0; i < segIt->imlList.size(); i++)
 		{

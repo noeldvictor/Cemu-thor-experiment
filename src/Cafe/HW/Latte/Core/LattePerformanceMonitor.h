@@ -108,6 +108,7 @@ typedef struct
 
 	LattePerfStatTimer gpuTime_dcStageDrawcallAPI; // drawcall api call
 	LattePerfStatTimer gpuTime_waitForAsync; // waiting for operations to complete (e.g. GX2DrawDone or force texture readback) Also includes texture readback and occlusion query polling logic
+	LattePerfStatTimer gpuTime_vkQueueWait; // Vulkan command-buffer fence wait
 
 	// generic
 	uint32 numCompiledVS; // number of compiled vertex shader programs
@@ -131,6 +132,7 @@ typedef struct
 		// per frame
 		LattePerfStatCounter numDrawBarriersPerFrame;
 		LattePerfStatCounter numBeginRenderpassPerFrame;
+		LattePerfStatCounter numCommandBufferSubmitsPerFrame;
 	}vk;
 
 	// calculated stats (per frame)

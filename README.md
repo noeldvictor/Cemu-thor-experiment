@@ -2,7 +2,7 @@
 
 ![Cemu for AYN Thor Experiment banner](docs/assets/cemu-thor-experiment-banner.png)
 
-This is a personal Android experiment fork of Cemu for the AYN Thor dual-screen handheld.
+This is a personal Android experiment fork of Cemu for the AYN Thor dual-screen handheld, especially the Base/Pro/Max models built around Snapdragon 8 Gen 2 and Adreno 740.
 
 It is vibe coded with AI assistance. It is messy, practical, and focused on making one real device do cool things. There is no guarantee of stability, correctness, compatibility, performance, or support. If that is a problem, please use upstream Cemu, another Android fork, or fork this repo and do your own thing.
 
@@ -22,7 +22,7 @@ This project stands on other people's work:
 - [SSimco/Cemu](https://github.com/SSimco/Cemu), Android fork work this branch tracks and merges from.
 - [SapphireRhodonite/Cemu](https://github.com/SapphireRhodonite/Cemu), especially the Android dual-screen direction that made this AYN Thor experiment a useful starting point.
 
-The current personal fork is [noeldvictor/Cemu_thor](https://github.com/noeldvictor/Cemu_thor).
+The current personal fork is [noeldvictor/Cemu-thor-experiment](https://github.com/noeldvictor/Cemu-thor-experiment).
 
 ## What This Fork Is
 
@@ -31,6 +31,8 @@ The current personal fork is [noeldvictor/Cemu_thor](https://github.com/noeldvic
 - A dual-screen handheld playground with Android presentation-display support.
 - A test bed for Star Fox Zero on Thor, including controller profile work, graphics-pack cheats, and crash/performance experiments.
 - An opt-in custom Turnip Vulkan driver flow for people testing community Turnip builds.
+
+Thor Base, Pro, and Max are treated as the same performance class: Snapdragon 8 Gen 2 CPU and Adreno 740 GPU. The Pro/Max RAM and storage are useful for multitasking, shader/cache headroom, and huge libraries, but they should not need different emulator CPU/GPU code paths from Base. The Lite model is the outlier and is not the main target of this fork.
 
 This project does not include games, keys, firmware dumps, system files, or copyrighted game assets.
 
@@ -44,6 +46,7 @@ This fork has intentionally diverged from a plain Cemu Android build in several 
 - OSD toggles for FPS display, session-only performance experiments, GamePad audio, and GamePad volume.
 - Custom Turnip driver download/select flow for Android Vulkan driver testing.
 - Star Fox Zero USA game profile with Thor-specific performance defaults.
+- Snapdragon/Adreno performance experiments: Android performance hints, fixed 60 Hz surface hints, PAD render-scale control, reduced dual-screen present serialization, and less global locking in hot HLE atomics.
 - Star Fox Zero controller profile that keeps physical right stick for gyro-style aiming and moves boost/brake/maneuvers to buttons.
 - Star Fox Zero OSD Controller Help, including an `R2 fires laser` live toggle.
 - Built-in Star Fox Zero cheat graphic packs for Infinite Life and Super Shot.
@@ -73,6 +76,7 @@ Android lives in `src/android`.
 From the repo root:
 
 ```sh
+git remote set-url origin git@github.com:noeldvictor/Cemu-thor-experiment.git
 git submodule update --init --recursive
 ```
 
@@ -83,6 +87,8 @@ From `src/android`:
 ```
 
 Release builds are the only useful builds for performance testing. Debug builds can be much slower.
+
+The release APK installs as `info.cemu.cemu_thor`. The debug APK installs separately as `info.cemu.cemu_thor.debug`, but debug builds are mostly for UI/dev smoke tests, not FPS testing.
 
 ## License
 

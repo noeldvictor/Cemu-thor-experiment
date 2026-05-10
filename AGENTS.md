@@ -2,11 +2,11 @@
 
 ## Project
 
-This checkout is `noeldvictor/Cemu_thor`, an Android-focused Cemu fork. Treat `android-port` as this personal fork's main/master branch.
+This checkout is `noeldvictor/Cemu-thor-experiment`, an Android-focused Cemu fork. Treat `android-port` as this personal fork's main/master branch.
 
 ## Remotes
 
-- `origin`: `git@github.com:noeldvictor/Cemu_thor.git`
+- `origin`: `git@github.com:noeldvictor/Cemu-thor-experiment.git`
 - `sapphire`: `git@github.com:SapphireRhodonite/Cemu.git`
 - `ssimco`: `git@github.com:SSimco/Cemu.git`
 - `upstream`: `git@github.com:cemu-project/Cemu.git`
@@ -44,13 +44,21 @@ The app currently builds ARM64 only via `abiFilters("arm64-v8a")`. The release A
 
 Android is Vulkan-only in this branch: `src/android/app/build.gradle.kts` passes `-DENABLE_OPENGL=OFF`, and `NativeEmulation.initializeRenderer()` creates a `VulkanRenderer`. If logs show `AdrenoVK` with `/vendor/lib64/hw/vulkan.adreno.so`, the app is using the system Qualcomm Vulkan driver rather than a custom Turnip driver.
 
-On Windows, prefer building from a path without spaces. A junction such as `C:\Users\leanerdesigner\Documents\Cemu_thor_build` pointing to the checkout works; vcpkg/autotools packages can fail when the physical build path contains spaces.
+On Windows, prefer building from a path without spaces if native dependency builds start failing; vcpkg/autotools packages can be sensitive to physical build paths with spaces. The Android Gradle build has also succeeded from the current checkout path, so do not move the repo just for housekeeping.
 
 ## Snapdragon / Adreno Performance Direction
 
 Treat the AYN Thor as the main test device, but avoid hard-coding Thor-only display IDs, panel modes, refresh-rate quirks, model strings, or AYN control-center behavior into core emulator paths. Prefer general Snapdragon 8 Gen 2 / Adreno 740 / Android Vulkan improvements that would also make sense on other Adreno 7xx devices.
 
-Good optimization targets are Vulkan/Turnip driver selection, shader compilation and cache behavior, accurate barrier and GX2DrawDone sync policy, dual-surface rendering cost, release-build profiling, thermal/GPU/CPU telemetry, and Android surface hints that describe fixed-rate emulator content. Do not bury device-specific behavior in general code; if a Thor-only workaround is truly needed, put it behind an explicit opt-in setting, document the evidence, and keep the stable default upstream-friendly.
+Assume Thor Base, Pro, and Max share the same emulator performance class: Snapdragon 8 Gen 2 CPU and Adreno 740 GPU. Do not split CPU/GPU behavior by Base/Pro/Max model name. The meaningful differences are RAM/storage headroom, so Base-specific work should focus on memory pressure, cache size, texture lifetime, and driver/package footprint rather than different scheduling or renderer code. Treat Thor Lite separately if it comes up; it is not the baseline for this fork.
+
+Good optimization targets are Vulkan/Turnip driver selection, shader compilation and cache behavior, accurate barrier and GX2DrawDone sync policy, dual-surface rendering cost, release-build profiling, thermal/GPU/CPU telemetry, Android surface hints that describe fixed-rate emulator content, and lock contention in hot HLE paths. Do not bury device-specific behavior in general code; if a Thor-only workaround is truly needed, put it behind an explicit opt-in setting, document the evidence, and keep the stable default upstream-friendly.
+
+The OSD `Display` page includes a `PAD render scale` slider for external/presentation GamePad output. Keep its default at 100%; lower values are explicit user performance choices that reduce the secondary surface buffer size while preserving aspect ratio. Android emulation surfaces should keep fixed-source 60 FPS frame-rate hints unless there is measured evidence that a game or device benefits from a different hint.
+
+For CPU-side Android optimization, prefer system-managed ADPF/performance hint sessions for the long-lived Wii U scheduler host threads over fixed CPU affinity or model-specific big-core pinning. Android ARM64 may use targeted emulator-core compiler tuning such as `-O3` on `CemuCafe`, but avoid unsafe math flags unless a game-specific regression pass has been done.
+
+Avoid reintroducing single global locks in hot emulation paths. The coreinit atomic HLE uses striped locks keyed by guest memory address so unrelated atomics from multicore games do not serialize while still avoiding ARM under-aligned host atomic loads/stores. Vulkan dual-screen presentation tracks the previous submitted command buffer per swapchain; using one shared marker can make the GamePad present wait for the TV present from the same frame and waste GPU/CPU overlap.
 
 Default to correctness and stability. Risky performance toggles must stay off by default, clearly labeled, and preferably session-only from the OSD. Measure changes with Cemu logs, `adb shell dumpsys display`, KGSL counters, and repeatable game scenes before treating them as wins.
 
@@ -59,25 +67,15 @@ Default to correctness and stability. Risky performance toggles must stay off by
 Use `adb devices` to confirm the AYN Thor is connected, then install the APK:
 
 ```sh
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-The local named debug APK copy used during Thor testing is:
-
-```sh
-C:\Users\leanerdesigner\Documents\Cemu_thor_build\src\android\app\build\outputs\apk\debug\cemu_thor-debug.apk
-```
-
-Use release builds for performance testing. Debug builds can be dramatically slower on Star Fox Zero because native code is unoptimized and debug-only logs/assertions are active. The local named release APK copy used during Thor testing is:
-
-```sh
-C:\Users\leanerdesigner\Documents\Cemu_thor_build\src\android\app\build\outputs\apk\release\cemu_thor-release.apk
-```
+Use release builds for performance testing. Debug builds can be dramatically slower on Star Fox Zero because native code is unoptimized and debug-only logs/assertions are active. The default release artifact is `src/android/app/build/outputs/apk/release/app-release.apk`.
 
 It is also useful to push a copy to the device:
 
 ```sh
-adb push cemu_thor-debug.apk /sdcard/Download/cemu_thor-debug.apk
+adb push app/build/outputs/apk/release/app-release.apk /sdcard/Download/cemu-thor-experiment-release.apk
 ```
 
 ## AYN Thor Dual Screen
@@ -90,7 +88,11 @@ The Android Back key is intentionally mapped to the same in-game menu toggle as 
 
 The emulation side menu is a two-panel drawer: the left rail selects `Display`, `Performance`, `Audio`, `Controls`, or `Tools`, and the right panel shows that section's controls. `Performance` includes `Show FPS`, `Async shader compile`, and session-only risky speed toggles for skipping GX2DrawDone sync and accurate Vulkan barriers. Keep those risky toggles off by default; they may improve FPS in some scenes but can destabilize games and should not be silently persisted. `Audio` includes `GamePad audio` and a `GamePad volume` slider.
 
-When smoke-testing dual screen, `dumpsys window windows` should show a `info.cemu.cemu_thor.debug` window on `mDisplayId=4` while `EmulationActivity` is on `displayId=0`.
+`Performance` also includes a developer-only guest PPC hot-block profiler. It is off by default and instruments Android ARM64 recompiler enterable segments with a gated runtime check. Use `Profile guest PPC blocks`, run the slow/crashy scene, then tap `Dump guest profile`; dumps are written under the app files directory at `dump/recompiler/hot_blocks_YYYYMMDD_HHMMSS.txt`. This is a targeting tool for later Star Fox HLE/recompiler work, not a speedup by itself, and it should stay off during normal performance testing.
+
+Star Fox Zero USA v16 has a guarded tiny-wrapper inliner in `src/Cafe/GamePatch.cpp`. It only runs for RPX hash `0x3768054d` with `prj_030` CRC `0x33864358`, verifies each target is a one-instruction wrapper followed by `blr`, then replaces direct `bl wrapper` calls with the wrapped PPC instruction before recompilation. Treat this as a measured Star Fox optimization from the hot-block profiler, not a general-purpose RPL optimizer.
+
+When smoke-testing dual screen, `dumpsys window windows` should show a `info.cemu.cemu_thor` or `info.cemu.cemu_thor.debug` window on the presentation display while `EmulationActivity` is on the main display. On the test Thor, that was usually `mDisplayId=4` for the lower screen and `displayId=0` for the top screen; do not hard-code those IDs.
 
 ## Star Fox Zero Recompiler Smoke Test
 

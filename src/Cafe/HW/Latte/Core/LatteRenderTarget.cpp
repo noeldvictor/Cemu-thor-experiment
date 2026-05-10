@@ -4,6 +4,7 @@
 #include "Cafe/HW/Latte/Core/LatteDraw.h"
 #include "Cafe/HW/Latte/Core/LatteShader.h"
 #include "Cafe/HW/Latte/Core/LatteOverlay.h"
+#include "Cafe/Android/AndroidPerformanceHints.h"
 #include "Cafe/HW/Latte/Core/LatteBufferCache.h"
 #include "Cafe/HW/Latte/Core/LatteTexture.h"
 #include "Cafe/HW/Latte/Core/LatteCachedFBO.h"
@@ -688,6 +689,7 @@ void LatteRenderTarget_itHLESwapScanBuffer()
 		performanceMonitor.gpuTime_frameTime.endMeasuring();
 	LattePerformanceMonitor_frameEnd();
 	LatteGPUState.frameCounter++;
+	AndroidPerformanceHints::ReportFrameBoundary();
 	g_renderer->SwapBuffers(true, true);
 
 	catchOpenGLError();

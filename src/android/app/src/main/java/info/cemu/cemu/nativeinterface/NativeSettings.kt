@@ -170,6 +170,12 @@ object NativeSettings {
     external fun setOverlayVRAMUsageEnabled(value: Boolean)
 
     @JvmStatic
+    external fun isOverlayPerfStatsEnabled(): Boolean
+
+    @JvmStatic
+    external fun setOverlayPerfStatsEnabled(value: Boolean)
+
+    @JvmStatic
     external fun isOverlayDebugEnabled(): Boolean
 
     @JvmStatic

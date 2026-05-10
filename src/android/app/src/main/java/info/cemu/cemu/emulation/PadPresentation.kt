@@ -9,11 +9,13 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup
 import android.view.WindowManager
+import kotlin.math.roundToInt
 
 class PadPresentation(
     context: Context,
     display: Display,
     private val rotateLeft: Boolean,
+    private val renderScalePercent: Int,
     private val holderCallback: SurfaceHolder.Callback,
     private val touchListener: CanvasOnTouchListener,
 ) : Presentation(context, display) {
@@ -30,6 +32,7 @@ class PadPresentation(
             width = mode.physicalWidth,
             height = mode.physicalHeight,
             rotateLeft = rotateLeft,
+            renderScalePercent = renderScalePercent,
         )
 
         val surfaceView = SurfaceView(context).apply {
@@ -42,10 +45,7 @@ class PadPresentation(
             holder.addCallback(holderCallback)
             holder.addCallback(object : SurfaceHolder.Callback {
                 override fun surfaceCreated(holder: SurfaceHolder) {
-                    holder.surface.setFrameRate(
-                        60f,
-                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
-                    )
+                    holder.surface.setFrameRate(60f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
                 }
 
                 override fun surfaceChanged(
@@ -63,7 +63,12 @@ class PadPresentation(
         setContentView(surfaceView)
     }
 
-    private fun computeSurfaceSize(width: Int, height: Int, rotateLeft: Boolean): Pair<Int, Int> {
+    private fun computeSurfaceSize(
+        width: Int,
+        height: Int,
+        rotateLeft: Boolean,
+        renderScalePercent: Int,
+    ): Pair<Int, Int> {
         var surfaceWidth = width
         var surfaceHeight = height
 
@@ -78,6 +83,10 @@ class PadPresentation(
             surfaceWidth = surfaceHeight
             surfaceHeight = oldWidth
         }
+
+        val scale = renderScalePercent.coerceIn(50, 100) / 100f
+        surfaceWidth = (surfaceWidth * scale).roundToInt().coerceAtLeast(1)
+        surfaceHeight = (surfaceHeight * scale).roundToInt().coerceAtLeast(1)
 
         return surfaceWidth to surfaceHeight
     }

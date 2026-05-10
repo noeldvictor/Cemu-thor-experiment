@@ -2180,7 +2180,9 @@ void VulkanRenderer::WaitForNextFinishedCommandBuffer()
 {
 	cemu_assert_debug(m_commandBufferSyncIndex != m_commandBufferIndex);
 	// wait on least recently submitted command buffer
+	performanceMonitor.gpuTime_vkQueueWait.beginMeasuring();
 	VkResult result = vkWaitForFences(m_logicalDevice, 1, &m_cmd_buffer_fences[m_commandBufferSyncIndex], true, UINT64_MAX);
+	performanceMonitor.gpuTime_vkQueueWait.endMeasuring();
 	if (result == VK_TIMEOUT)
 	{
 		cemuLog_log(LogType::Force, "vkWaitForFences: Returned VK_TIMEOUT on infinite fence");
@@ -2237,6 +2239,7 @@ void VulkanRenderer::SubmitCommandBuffer(VkSemaphore signalSemaphore, VkSemaphor
 	if (result != VK_SUCCESS)
 		UnrecoverableError(fmt::format("failed to submit command buffer. Error {}", result).c_str());
 	m_numSubmittedCmdBuffers++;
+	performanceMonitor.vk.numCommandBufferSubmitsPerFrame.increment();
 
 	// check if any previously submitted command buffers have finished execution
 	ProcessFinishedCommandBuffers();
@@ -3091,9 +3094,11 @@ void VulkanRenderer::SwapBuffer(bool mainWindow)
 
 	cemu_assert_debug(m_numSubmittedCmdBuffers > 0);
 
-	// wait for the previous frame to finish rendering
-	WaitCommandBufferFinished(m_commandBufferIDOfPrevFrame);
-	m_commandBufferIDOfPrevFrame = currentFrameCmdBufferID;
+	// Keep TV and GamePad swapchains from forcing each other to idle. A single
+	// shared previous-frame marker serializes dual-screen presents on Android.
+	const size_t previousFrameIndex = mainWindow ? 0 : 1;
+	WaitCommandBufferFinished(m_commandBufferIDOfPrevFrame[previousFrameIndex]);
+	m_commandBufferIDOfPrevFrame[previousFrameIndex] = currentFrameCmdBufferID;
 
 	chainInfo.WaitAvailableFence();
 

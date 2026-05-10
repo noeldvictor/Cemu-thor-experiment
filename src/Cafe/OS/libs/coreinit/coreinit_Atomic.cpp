@@ -1,5 +1,6 @@
 #include "Cafe/OS/common/OSCommon.h"
 #include "Cafe/HW/MMU/MMU.h"
+#include <array>
 #include <atomic>
 #include <mutex>
 #include "coreinit_Atomic.h"
@@ -8,11 +9,19 @@ namespace coreinit
 {
 	namespace
 	{
-		std::mutex s_atomicLock;
+		constexpr size_t ATOMIC_LOCK_STRIPE_COUNT = 64;
+		static_assert((ATOMIC_LOCK_STRIPE_COUNT & (ATOMIC_LOCK_STRIPE_COUNT - 1)) == 0);
+
+		std::array<std::mutex, ATOMIC_LOCK_STRIPE_COUNT> s_atomicLocks;
 
 		MPTR atomicPtrToMPTR(const void* mem)
 		{
 			return memory_getVirtualOffsetFromPointer(const_cast<void*>(mem));
+		}
+
+		std::mutex& atomicLockForMPTR(MPTR memMPTR)
+		{
+			return s_atomicLocks[(memMPTR >> 5) & (ATOMIC_LOCK_STRIPE_COUNT - 1)];
 		}
 	}
 
@@ -20,8 +29,8 @@ namespace coreinit
 
 	uint32 OSSwapAtomic(std::atomic<uint32be>* mem, uint32 newValue)
 	{
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint32 previousValue = memory_readU32(memMPTR);
 		memory_writeU32(memMPTR, newValue);
 		return previousValue;
@@ -30,8 +39,8 @@ namespace coreinit
 	bool OSCompareAndSwapAtomic(std::atomic<uint32be>* mem, uint32 compareValue, uint32 swapValue)
 	{
 		// seen in GTA3 homebrew port
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint32 previousValue = memory_readU32(memMPTR);
 		if (previousValue != compareValue)
 			return false;
@@ -42,8 +51,8 @@ namespace coreinit
 	bool OSCompareAndSwapAtomicEx(std::atomic<uint32be>* mem, uint32 compareValue, uint32 swapValue, uint32be* previousValue)
 	{
 		// seen in GTA3 homebrew port
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint32 currentValue = memory_readU32(memMPTR);
 		const bool exchanged = currentValue == compareValue;
 		if (exchanged)
@@ -56,8 +65,8 @@ namespace coreinit
 	uint32 OSAddAtomic(std::atomic<uint32be>* mem, uint32 adder)
 	{
         // used by SDL Wii U port
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint32 previousValue = memory_readU32(memMPTR);
 		memory_writeU32(memMPTR, previousValue + adder);
 		return previousValue;
@@ -67,8 +76,8 @@ namespace coreinit
 
 	uint64 OSSwapAtomic64(std::atomic<uint64be>* mem, uint64 newValue)
 	{
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint64 previousValue = memory_readU64(memMPTR);
 		memory_writeU64(memMPTR, newValue);
 		return previousValue;
@@ -81,14 +90,15 @@ namespace coreinit
 
 	uint64 OSGetAtomic64(std::atomic<uint64be>* mem)
 	{
-		std::lock_guard lock(s_atomicLock);
-		return memory_readU64(atomicPtrToMPTR(mem));
+		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
+		return memory_readU64(memMPTR);
 	}
 
 	uint64 OSAddAtomic64(std::atomic<uint64be>* mem, uint64 adder)
 	{
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint64 previousValue = memory_readU64(memMPTR);
 		memory_writeU64(memMPTR, previousValue + adder);
 		return previousValue;
@@ -96,8 +106,8 @@ namespace coreinit
 
 	uint64 OSAndAtomic64(std::atomic<uint64be>* mem, uint64 val)
 	{
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint64 previousValue = memory_readU64(memMPTR);
 		memory_writeU64(memMPTR, previousValue & val);
 		return previousValue;
@@ -105,8 +115,8 @@ namespace coreinit
 
 	uint64 OSOrAtomic64(std::atomic<uint64be>* mem, uint64 val)
 	{
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint64 previousValue = memory_readU64(memMPTR);
 		memory_writeU64(memMPTR, previousValue | val);
 		return previousValue;
@@ -114,8 +124,8 @@ namespace coreinit
 
 	bool OSCompareAndSwapAtomic64(std::atomic<uint64be>* mem, uint64 compareValue, uint64 swapValue)
 	{
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint64 previousValue = memory_readU64(memMPTR);
 		if (previousValue != compareValue)
 			return false;
@@ -125,8 +135,8 @@ namespace coreinit
 
 	bool OSCompareAndSwapAtomicEx64(std::atomic<uint64be>* mem, uint64 compareValue, uint64 swapValue, uint64be* previousValue)
 	{
-		std::lock_guard lock(s_atomicLock);
 		const MPTR memMPTR = atomicPtrToMPTR(mem);
+		std::lock_guard lock(atomicLockForMPTR(memMPTR));
 		const uint64 currentValue = memory_readU64(memMPTR);
 		const bool exchanged = currentValue == compareValue;
 		if (exchanged)

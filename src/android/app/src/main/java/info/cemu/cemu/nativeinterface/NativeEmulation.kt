@@ -61,5 +61,14 @@ object NativeEmulation {
     external fun setSwapScreens(swapped: Boolean)
 
     @JvmStatic
+    external fun setGuestProfilerEnabled(enabled: Boolean)
+
+    @JvmStatic
+    external fun resetGuestProfiler()
+
+    @JvmStatic
+    external fun dumpGuestProfiler(): String
+
+    @JvmStatic
     external fun supportsLoadingCustomDriver(): Boolean
 }

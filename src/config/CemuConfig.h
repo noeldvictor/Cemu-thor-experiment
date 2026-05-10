@@ -473,6 +473,7 @@ struct CemuConfig
 		bool cpu_per_core_usage = false;
 		bool ram_usage = false;
 		bool vram_usage = false;
+		bool perf_stats = false;
 		bool debug = false;
 	} overlay{};
 

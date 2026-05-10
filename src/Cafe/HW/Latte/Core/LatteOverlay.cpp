@@ -66,6 +66,12 @@ struct OverlayList
 const auto kPopupFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
 
 const float kBackgroundAlpha = 0.65f;
+
+static double PerfTimerMs(LattePerfStatTimer& timer)
+{
+	return (double)PPCTimer_tscToMicroseconds(timer.getPreviousFrameValue()) / 1000.0;
+}
+
 void LatteOverlay_renderOverlay(ImVec2& position, ImVec2& pivot, sint32 direction, float fontSize, bool pad)
 {
 	auto& config = GetConfig();
@@ -76,7 +82,7 @@ void LatteOverlay_renderOverlay(ImVec2& position, ImVec2& pivot, sint32 directio
 	const ImVec4 color = ImGui::ColorConvertU32ToFloat4(config.overlay.text_color);
 	ImGui::PushStyleColor(ImGuiCol_Text, color);
 	// stats overlay
-	if (config.overlay.fps || config.overlay.drawcalls || config.overlay.cpu_usage || config.overlay.cpu_per_core_usage || config.overlay.ram_usage)
+	if (config.overlay.fps || config.overlay.drawcalls || config.overlay.cpu_usage || config.overlay.cpu_per_core_usage || config.overlay.ram_usage || config.overlay.vram_usage || config.overlay.perf_stats || config.overlay.debug)
 	{
 		ImGui::SetNextWindowPos(position, ImGuiCond_Always, pivot);
 		ImGui::SetNextWindowBgAlpha(kBackgroundAlpha);
@@ -104,6 +110,19 @@ void LatteOverlay_renderOverlay(ImVec2& position, ImVec2& pivot, sint32 directio
 
 			if(config.overlay.vram_usage && g_state.vramUsage != -1 && g_state.vramTotal != -1)
 				ImGui::Text("VRAM: %dMB / %dMB", g_state.vramUsage, g_state.vramTotal);
+
+			if (config.overlay.perf_stats)
+			{
+				ImGui::Text("--- Perf details ---");
+				ImGui::Text("Frame: %.2fms", PerfTimerMs(performanceMonitor.gpuTime_frameTime));
+				ImGui::Text("Shader: %.2fms", PerfTimerMs(performanceMonitor.gpuTime_shaderCreate));
+				ImGui::Text("Async wait: %.2fms", PerfTimerMs(performanceMonitor.gpuTime_waitForAsync));
+				ImGui::Text("Latte wait: %.2fms / %.2fms", PerfTimerMs(performanceMonitor.gpuTime_idleTime), PerfTimerMs(performanceMonitor.gpuTime_fenceTime));
+				ImGui::Text("Vulkan wait: %.2fms", PerfTimerMs(performanceMonitor.gpuTime_vkQueueWait));
+				ImGui::Text("Submits/f: %u", performanceMonitor.vk.numCommandBufferSubmitsPerFrame.get());
+				ImGui::Text("BeginRP/f: %u", performanceMonitor.vk.numBeginRenderpassPerFrame.get());
+				ImGui::Text("Barriers/f: %u", performanceMonitor.vk.numDrawBarriersPerFrame.get());
+			}
 
 			if (config.overlay.debug)
 			{

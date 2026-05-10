@@ -1,5 +1,6 @@
 #include "Cafe/OS/common/OSCommon.h"
 #include "Cafe/OS/RPL/rpl.h"
+#include "Cafe/OS/RPL/rpl_structs.h"
 #include "Cafe/HW/Espresso/Interpreter/PPCInterpreterInternal.h"
 #include "CafeSystem.h"
 #include "config/ActiveSettings.h" // Selectively add some patches based on network settings.
@@ -289,6 +290,107 @@ sint32 hleIndex_h000000002 = -1;
 sint32 hleIndex_h000000003 = -1;
 sint32 hleIndex_h000000004 = -1;
 
+struct StarFoxZeroInlineCallPatch
+{
+	uint32 targetOffset;
+	uint32 replacementOpcode;
+	const char* name;
+};
+
+static bool starFoxZero_isRelativeBLTo(uint32 callAddr, uint32 opcode, uint32 targetAddr)
+{
+	if ((opcode & 0xFC000003) != 0x48000001)
+		return false;
+
+	sint32 offset;
+	PPC_OPC_TEMPL_I(opcode, offset);
+	return (callAddr + offset) == targetAddr;
+}
+
+static uint32 starFoxZero_inlineDirectCalls(RPLModule* module, uint32 targetAddr, uint32 replacementOpcode)
+{
+	uint32 patchedCount = 0;
+	const uint32 scanStart = module->regionMappingBase_text.GetMPTR();
+	const uint32 scanEnd = scanStart + module->regionSize_text;
+
+	for (uint32 scanAddr = scanStart; scanAddr + 4 <= scanEnd; scanAddr += 4)
+	{
+		const uint32 opcode = memory_readU32(scanAddr);
+		if (!starFoxZero_isRelativeBLTo(scanAddr, opcode, targetAddr))
+			continue;
+
+		memory_writeU32(scanAddr, replacementOpcode);
+		patchedCount++;
+	}
+
+	return patchedCount;
+}
+
+static void starFoxZero_inlineTinyWrapperCalls()
+{
+	if (CafeSystem::GetRPXHashUpdated() != 0x3768054d)
+		return;
+
+	RPLModule* module = RPLLoader_FindModuleByName("prj_030");
+	if (!module)
+		return;
+
+	if (module->patchCRC != 0x33864358)
+	{
+		cemuLog_log(LogType::Force, "Star Fox Zero: skipping tiny wrapper inlining for unexpected prj_030 CRC 0x{:08x}", module->patchCRC);
+		return;
+	}
+
+	const uint32 textBase = module->regionMappingBase_text.GetMPTR();
+	static constexpr StarFoxZeroInlineCallPatch s_patches[] = {
+		{ 0x78d104, 0x8063014c, "lwz r3, 0x14c(r3)" },
+		{ 0x78d10c, 0x80630150, "lwz r3, 0x150(r3)" },
+		{ 0x76a02c, 0x80630594, "lwz r3, 0x594(r3)" },
+		{ 0x9014b4, 0x80630000, "lwz r3, 0(r3)" },
+		{ 0x902284, 0x80630000, "lwz r3, 0(r3)" },
+		{ 0x900c90, 0x80630000, "lwz r3, 0(r3)" },
+		{ 0x8c4c6c, 0x80631f00, "lwz r3, 0x1f00(r3)" },
+		{ 0x8c4c20, 0x80631ef8, "lwz r3, 0x1ef8(r3)" },
+		{ 0x8f918c, 0x38600001, "li r3, 1" },
+		{ 0x791834, 0x38630220, "addi r3, r3, 0x220" },
+		{ 0x901e18, 0x38630208, "addi r3, r3, 0x208" },
+		{ 0x792ea4, 0x806300c0, "lwz r3, 0xc0(r3)" },
+		{ 0x58a1ac, 0x38600000, "li r3, 0" },
+		{ 0x7cbd04, 0xc0230018, "lfs f1, 0x18(r3)" },
+		{ 0x76b124, 0x886305b0, "lbz r3, 0x5b0(r3)" },
+		{ 0x7321b4, 0x38600001, "li r3, 1" },
+		{ 0x694d04, 0x38600000, "li r3, 0" },
+		{ 0x694d0c, 0x38600001, "li r3, 1" },
+	};
+
+	uint32 totalPatched = 0;
+	for (const auto& patch : s_patches)
+	{
+		const uint32 targetAddr = textBase + patch.targetOffset;
+		const uint32 targetOpcode = memory_readU32(targetAddr);
+		const uint32 targetReturn = memory_readU32(targetAddr + 4);
+		if (targetOpcode != patch.replacementOpcode || targetReturn != 0x4e800020)
+		{
+			cemuLog_log(LogType::Force,
+				"Star Fox Zero: skip inline {} at 0x{:08x}, expected 0x{:08x}/blr got 0x{:08x}/0x{:08x}",
+				patch.name, targetAddr, patch.replacementOpcode, targetOpcode, targetReturn);
+			continue;
+		}
+
+		const uint32 patchedCount = starFoxZero_inlineDirectCalls(module, targetAddr, patch.replacementOpcode);
+		if (patchedCount)
+		{
+			cemuLog_log(LogType::Force,
+				"Star Fox Zero: inlined {} direct calls to {} wrapper at 0x{:08x}",
+				patchedCount, patch.name, targetAddr);
+			totalPatched += patchedCount;
+		}
+	}
+
+	if (totalPatched)
+		cemuLog_log(LogType::Force, "Star Fox Zero: inlined {} tiny direct wrapper calls", totalPatched);
+}
+
 /*
  * Returns true for all HLE functions that do not jump to LR
  * Used by recompiler to determine function code flow
@@ -310,6 +412,8 @@ void GamePatch_scan()
 {
 	MPTR hleAddr;
 	uint32 hleInstallStart = GetTickCount();
+
+	starFoxZero_inlineTinyWrapperCalls();
 
 	hleAddr = hle_locate(xcx_gpuHangDetection_degradeFramebuffer, NULL, sizeof(xcx_gpuHangDetection_degradeFramebuffer));
 	if( hleAddr )

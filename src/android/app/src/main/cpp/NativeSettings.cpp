@@ -101,6 +101,18 @@ Java_info_cemu_cemu_nativeinterface_NativeSettings_setOverlayVRAMUsageEnabled([[
 }
 
 extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeSettings_isOverlayPerfStatsEnabled([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
+{
+	return GetConfig().overlay.perf_stats;
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeSettings_setOverlayPerfStatsEnabled([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean enabled)
+{
+	GetConfig().overlay.perf_stats = enabled;
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeSettings_isOverlayDebugEnabled([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
 {
 	return GetConfig().overlay.debug;

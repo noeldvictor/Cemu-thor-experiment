@@ -42,11 +42,14 @@ data class SideMenuState(
     val isPadOnExternalDisplay: Boolean = true,
     val areScreensSwapped: Boolean = false,
     val isExternalScreenRotatedLeft: Boolean = false,
+    val padRenderScalePercent: Int = 100,
     val isInputOverlayVisible: Boolean = false,
     val isFPSOverlayVisible: Boolean = false,
+    val isPerfOverlayVisible: Boolean = false,
     val isAsyncShaderCompileEnabled: Boolean = true,
     val skipGX2DrawDoneSync: Boolean = false,
     val skipAccurateBarriers: Boolean = false,
+    val isGuestProfilerEnabled: Boolean = false,
     val isGamePadAudioEnabled: Boolean = false,
     val gamePadVolume: Int = 0,
 )
@@ -117,8 +120,12 @@ class EmulationViewModel(
                     isPadVisible = settings.emulationSettings.isPadVisible,
                     isPadOnExternalDisplay = settings.emulationSettings.isPadOnExternalDisplay,
                     isExternalScreenRotatedLeft = settings.emulationSettings.isExternalScreenRotatedLeft,
+                    padRenderScalePercent = normalizePadRenderScalePercent(
+                        settings.emulationSettings.padRenderScalePercent
+                    ),
                     isInputOverlayVisible = settings.inputOverlaySettings.isOverlayEnabled,
                     isFPSOverlayVisible = isFPSOverlayVisible(),
+                    isPerfOverlayVisible = isPerfOverlayVisible(),
                     isAsyncShaderCompileEnabled = NativeSettings.getAsyncShaderCompile(),
                     skipGX2DrawDoneSync = !savedGX2DrawDoneSync,
                     skipAccurateBarriers = !savedAccurateBarriers,
@@ -165,6 +172,10 @@ class EmulationViewModel(
             setFPSOverlayVisible(sideMenuState.isFPSOverlayVisible)
         }
 
+        if (oldState.isPerfOverlayVisible != sideMenuState.isPerfOverlayVisible) {
+            setPerfOverlayVisible(sideMenuState.isPerfOverlayVisible)
+        }
+
         var shouldSaveSettings = false
         if (oldState.isAsyncShaderCompileEnabled != sideMenuState.isAsyncShaderCompileEnabled) {
             NativeSettings.setAsyncShaderCompile(sideMenuState.isAsyncShaderCompileEnabled)
@@ -177,6 +188,10 @@ class EmulationViewModel(
 
         if (oldState.skipAccurateBarriers != sideMenuState.skipAccurateBarriers) {
             NativeSettings.setAccurateBarriers(!sideMenuState.skipAccurateBarriers)
+        }
+
+        if (oldState.isGuestProfilerEnabled != sideMenuState.isGuestProfilerEnabled) {
+            NativeEmulation.setGuestProfilerEnabled(sideMenuState.isGuestProfilerEnabled)
         }
 
         if (oldState.isGamePadAudioEnabled != sideMenuState.isGamePadAudioEnabled) {
@@ -195,7 +210,8 @@ class EmulationViewModel(
 
         if (oldState.isPadVisible != sideMenuState.isPadVisible ||
             oldState.isPadOnExternalDisplay != sideMenuState.isPadOnExternalDisplay ||
-            oldState.isExternalScreenRotatedLeft != sideMenuState.isExternalScreenRotatedLeft
+            oldState.isExternalScreenRotatedLeft != sideMenuState.isExternalScreenRotatedLeft ||
+            oldState.padRenderScalePercent != sideMenuState.padRenderScalePercent
         ) {
             viewModelScope.launch {
                 dataStore.updateData {
@@ -204,6 +220,9 @@ class EmulationViewModel(
                             isPadVisible = sideMenuState.isPadVisible,
                             isPadOnExternalDisplay = sideMenuState.isPadOnExternalDisplay,
                             isExternalScreenRotatedLeft = sideMenuState.isExternalScreenRotatedLeft,
+                            padRenderScalePercent = normalizePadRenderScalePercent(
+                                sideMenuState.padRenderScalePercent
+                            ),
                         )
                     )
                 }
@@ -215,6 +234,10 @@ class EmulationViewModel(
         NativeSettings.getOverlayPosition() != NativeSettings.OverlayScreenPosition.DISABLED &&
                 NativeSettings.isOverlayFPSEnabled()
 
+    private fun isPerfOverlayVisible() =
+        NativeSettings.getOverlayPosition() != NativeSettings.OverlayScreenPosition.DISABLED &&
+                NativeSettings.isOverlayPerfStatsEnabled()
+
     private fun setFPSOverlayVisible(enabled: Boolean) {
         if (enabled) {
             disableNonFPSOverlayStats()
@@ -225,6 +248,20 @@ class EmulationViewModel(
         }
 
         NativeSettings.setOverlayFPSEnabled(enabled)
+
+        if (!enabled && !hasOtherOverlayStatsEnabled()) {
+            NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.DISABLED)
+        }
+
+        saveSettingsPreservingSessionPerformanceOverrides()
+    }
+
+    private fun setPerfOverlayVisible(enabled: Boolean) {
+        if (enabled && NativeSettings.getOverlayPosition() == NativeSettings.OverlayScreenPosition.DISABLED) {
+            NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.TOP_LEFT)
+        }
+
+        NativeSettings.setOverlayPerfStatsEnabled(enabled)
 
         if (!enabled && !hasOtherOverlayStatsEnabled()) {
             NativeSettings.setOverlayPosition(NativeSettings.OverlayScreenPosition.DISABLED)
@@ -250,6 +287,7 @@ class EmulationViewModel(
         NativeSettings.setOverlayCPUPerCoreUsageEnabled(false)
         NativeSettings.setOverlayRAMUsageEnabled(false)
         NativeSettings.setOverlayVRAMUsageEnabled(false)
+        NativeSettings.setOverlayPerfStatsEnabled(false)
         NativeSettings.setOverlayDebugEnabled(false)
     }
 
@@ -259,6 +297,7 @@ class EmulationViewModel(
                 NativeSettings.isOverlayCPUPerCoreUsageEnabled() ||
                 NativeSettings.isOverlayRAMUsageEnabled() ||
                 NativeSettings.isOverlayVRAMUsageEnabled() ||
+                NativeSettings.isOverlayPerfStatsEnabled() ||
                 NativeSettings.isOverlayDebugEnabled()
 
     val gamePadPosition = dataStore.data.map { it.emulationSettings.gamePadPosition }
@@ -412,3 +451,10 @@ class EmulationViewModel(
         }
     }
 }
+
+private fun normalizePadRenderScalePercent(value: Int): Int =
+    when {
+        value <= 62 -> 50
+        value <= 87 -> 75
+        else -> 100
+    }

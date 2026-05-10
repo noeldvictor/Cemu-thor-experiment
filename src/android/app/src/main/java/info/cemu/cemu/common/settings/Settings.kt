@@ -17,6 +17,7 @@ data class EmulationSettings(
     val isPadVisible: Boolean = true,
     val isPadOnExternalDisplay: Boolean = true,
     val isExternalScreenRotatedLeft: Boolean = false,
+    val padRenderScalePercent: Int = 100,
 )
 
 @Serializable
