@@ -78,7 +78,7 @@ fun HotkeySettingsScreen(
                         style = MaterialTheme.typography.bodyLarge
                     )
 
-                    if (combo != null) {
+                    if (combo != null && combo.keys.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                             combo.keys.forEach { key ->
                                 KeyChip(key)
@@ -210,6 +210,7 @@ private fun HotkeyBindingDialog(
 private fun hotkeyActionToString(hotkeyAction: HotkeyAction) = when (hotkeyAction) {
     HotkeyAction.QUIT -> tr("Quit")
     HotkeyAction.TOGGLE_MENU -> tr("Toggle menu")
+    HotkeyAction.TOGGLE_FAST_FORWARD -> tr("Toggle fast forward")
     HotkeyAction.SHOW_EMULATED_USB_DEVICES_DIALOG -> tr("Show Emulated USB Devices dialog")
 }
 

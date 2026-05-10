@@ -425,3 +425,13 @@ Java_info_cemu_cemu_nativeinterface_NativeEmulation_resumeTitle([[maybe_unused]]
 {
 	CafeSystem::ResumeTitle();
 }
+
+extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_toggleFastForward([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
+{
+	constexpr uint8 normalSpeed = 3;
+	constexpr uint8 fastForwardSpeed = 1;
+	const bool enableFastForward = ActiveSettings::GetTimerShiftFactor() >= normalSpeed;
+	ActiveSettings::SetTimerShiftFactor(enableFastForward ? fastForwardSpeed : normalSpeed);
+	return enableFastForward;
+}

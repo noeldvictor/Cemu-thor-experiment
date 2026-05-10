@@ -2,6 +2,7 @@ package info.cemu.cemu.emulation.input
 
 import android.view.KeyEvent
 import info.cemu.cemu.common.android.inputevent.isFromPhysicalController
+import info.cemu.cemu.common.settings.DEFAULT_HOTKEY_SETTINGS
 import info.cemu.cemu.common.settings.HotkeyAction
 import info.cemu.cemu.common.settings.HotkeyCombo
 import kotlinx.coroutines.channels.BufferOverflow
@@ -13,18 +14,19 @@ object HotkeyManager {
     private val pressedKeys: MutableSet<Int> = mutableSetOf()
     private val activeActions: MutableSet<HotkeyAction> = mutableSetOf()
 
-    private var hotkeyMappings: Map<HotkeyAction, HotkeyCombo> = emptyMap()
+    private var hotkeyMappings: Map<HotkeyAction, HotkeyCombo> = DEFAULT_HOTKEY_SETTINGS
     fun setHotkeyMappings(hotkeyMappings: Map<HotkeyAction, HotkeyCombo>) {
-        this.hotkeyMappings = hotkeyMappings
+        this.hotkeyMappings = DEFAULT_HOTKEY_SETTINGS + hotkeyMappings
+        activeActions.clear()
     }
 
     fun triggerAction(action: HotkeyAction) {
         _actions.tryEmit(action)
     }
 
-    fun onKeyEvent(keyEvent: KeyEvent) {
+    fun onKeyEvent(keyEvent: KeyEvent): Boolean {
         if (!keyEvent.isFromPhysicalController()) {
-            return
+            return false
         }
 
         if (keyEvent.action == KeyEvent.ACTION_DOWN) {
@@ -33,24 +35,30 @@ object HotkeyManager {
             pressedKeys.remove(keyEvent.keyCode)
         }
 
-        checkHotkeys()
+        return checkHotkeys()
     }
 
-    private fun checkHotkeys() {
+    private fun checkHotkeys(): Boolean {
+        var shouldConsumeInput = false
+
         for ((action, combo) in hotkeyMappings) {
             val comboKeys = combo.keys
 
-            val isActive = pressedKeys.containsAll(comboKeys)
+            val isActive = comboKeys.isNotEmpty() && pressedKeys.containsAll(comboKeys)
 
             if (!isActive) {
                 activeActions.remove(action)
                 continue
             }
 
+            shouldConsumeInput = true
+
             if (activeActions.add(action)) {
                 _actions.tryEmit(action)
             }
         }
+
+        return shouldConsumeInput
     }
 
 

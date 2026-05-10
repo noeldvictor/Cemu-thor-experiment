@@ -148,6 +148,13 @@ fun EmulationScreen(
             when (action) {
                 HotkeyAction.QUIT -> showQuitConfirmationDialog = true
                 HotkeyAction.TOGGLE_MENU -> toggleMenu()
+                HotkeyAction.TOGGLE_FAST_FORWARD -> {
+                    val isEnabled = NativeEmulation.toggleFastForward()
+                    snackbarHostState.showMessage(
+                        scope,
+                        if (isEnabled) tr("Fast forward on") else tr("Fast forward off")
+                    )
+                }
                 HotkeyAction.SHOW_EMULATED_USB_DEVICES_DIALOG -> showEmulatedUSBDevices = true
             }
         }

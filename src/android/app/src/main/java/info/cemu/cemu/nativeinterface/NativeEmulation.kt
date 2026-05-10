@@ -49,6 +49,9 @@ object NativeEmulation {
     external fun resumeTitle()
 
     @JvmStatic
+    external fun toggleFastForward(): Boolean
+
+    @JvmStatic
     external fun initializeSystems()
 
     @JvmStatic

@@ -88,7 +88,9 @@ class EmulationActivity : AppCompatActivity() {
             return true
         }
 
-        HotkeyManager.onKeyEvent(event)
+        if (HotkeyManager.onKeyEvent(event)) {
+            return true
+        }
 
         if (processInputEvents && InputHandler.onKeyEvent(event)) {
             return true
