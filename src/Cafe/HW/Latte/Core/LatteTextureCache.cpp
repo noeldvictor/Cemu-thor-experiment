@@ -4,6 +4,8 @@
 #include "Cafe/HW/Latte/Renderer/Renderer.h"
 #include "Common/cpu_features.h"
 
+#include <cstring>
+
 std::unordered_set<LatteTexture*> g_allTextures;
 
 void LatteTC_Init()
@@ -30,10 +32,18 @@ bool LatteTC_IsRegisteredTexture(LatteTexture* tex)
 	return tex && g_allTextures.find(tex) != g_allTextures.end();
 }
 
+template<typename T>
+T LatteTC_ReadUnaligned(const void* ptr)
+{
+	T value;
+	std::memcpy(&value, ptr, sizeof(T));
+	return value;
+}
+
 // sample few uint64s uniformly over memory range
 uint32 _quickStochasticHash(void* texData, uint32 memRange)
 {
-	uint64* texDataU64 = (uint64*)texData;
+	auto* texDataU8 = static_cast<uint8*>(texData);
 
 	uint64 hashVal = 0;
 	memRange /= sizeof(uint64);
@@ -41,9 +51,9 @@ uint32 _quickStochasticHash(void* texData, uint32 memRange)
 	uint32 memStep = memRange / 37; // use prime here to avoid memStep aligning nicely with pitch of texture, leading to sampling only along the border of a texture
 	for (sint32 i = 0; i < 37; i++)
 	{
-		hashVal += *texDataU64;
+		hashVal += LatteTC_ReadUnaligned<uint64>(texDataU8);
 		hashVal = (hashVal << 3) | (hashVal >> 61);
-		texDataU64 += memStep;
+		texDataU8 += memStep * sizeof(uint64);
 	}
 	return (uint32)hashVal ^ (uint32)(hashVal >> 32);
 }
@@ -69,14 +79,20 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 		if (hostTexture->tileMode == Latte::E_HWTILEMODE::TM_1D_TILED_THICK && hostTexture->depth == 8 && hostTexture->width == 8 && hostTexture->height == 8)
 		{
 			// special case for Wonderful 101
-			uint32* texDataU32 = (uint32*)memory_getPointerFromPhysicalOffset(hostTexture->texDataPtrLow);
-			return texDataU32[0] ^ texDataU32[0x100/4] ^ texDataU32[0x200/4] ^ texDataU32[0x300/4]; // check the first thick slice (each slice has 0x400 bytes, with 0x100 bytes between layers)
+			uint8* texDataU8 = memory_getPointerFromPhysicalOffset(hostTexture->texDataPtrLow);
+			return LatteTC_ReadUnaligned<uint32>(texDataU8) ^
+				LatteTC_ReadUnaligned<uint32>(texDataU8 + 0x100) ^
+				LatteTC_ReadUnaligned<uint32>(texDataU8 + 0x200) ^
+				LatteTC_ReadUnaligned<uint32>(texDataU8 + 0x300); // check the first thick slice (each slice has 0x400 bytes, with 0x100 bytes between layers)
 		}
-		uint32* texDataU32 = (uint32*)memory_getPointerFromPhysicalOffset(hostTexture->texDataPtrLow);
-		return texDataU32[0] ^ texDataU32[1] ^ texDataU32[2] ^ texDataU32[3];
+		uint8* texDataU8 = memory_getPointerFromPhysicalOffset(hostTexture->texDataPtrLow);
+		return LatteTC_ReadUnaligned<uint32>(texDataU8) ^
+			LatteTC_ReadUnaligned<uint32>(texDataU8 + 4) ^
+			LatteTC_ReadUnaligned<uint32>(texDataU8 + 8) ^
+			LatteTC_ReadUnaligned<uint32>(texDataU8 + 12);
 	}
 
-	uint32* texDataU32 = (uint32*)memory_getPointerFromPhysicalOffset(hostTexture->texDataPtrLow);
+	uint8* texDataU8 = memory_getPointerFromPhysicalOffset(hostTexture->texDataPtrLow);
 	uint32 hashVal = 0;
 	uint32 pixelCount = hostTexture->width*hostTexture->height;
 
@@ -89,14 +105,14 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			memRange /= sizeof(uint32);
 			while (memRange--)
 			{
-				hashVal += *texDataU32;
+				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
 				hashVal = (hashVal << 3) | (hashVal >> 29);
-				texDataU32++;
+				texDataU8 += sizeof(uint32);
 			}
 		}
 		else
 		{
-			hashVal = _quickStochasticHash(texDataU32, memRange);
+			hashVal = _quickStochasticHash(texDataU8, memRange);
 		}
 		return hashVal;
 	}
@@ -111,9 +127,9 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			memRange /= (4*sizeof(uint32));
 			while( memRange-- )
 			{
-				hashVal += *texDataU32;
+				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
 				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU32 += 4;
+				texDataU8 += 4 * sizeof(uint32);
 			}
 		}
 		else
@@ -121,9 +137,9 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			memRange /= (32*sizeof(uint32));
 			while( memRange-- )
 			{
-				hashVal += *texDataU32;
+				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
 				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU32 += 32;
+				texDataU8 += 32 * sizeof(uint32);
 			}
 		}
 	}
@@ -136,9 +152,9 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			memRange /= (12*sizeof(uint32));
 			while( memRange-- )
 			{
-				hashVal += *texDataU32;
+				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
 				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU32 += 12;
+				texDataU8 += 12 * sizeof(uint32);
 			}
 		}
 		else
@@ -146,9 +162,9 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			memRange /= (96*sizeof(uint32));
 			while( memRange-- )
 			{
-				hashVal += *texDataU32;
+				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
 				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU32 += 96;
+				texDataU8 += 96 * sizeof(uint32);
 			}
 		}
 	}
@@ -162,11 +178,11 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			if (g_CPUFeatures.x86.avx2)
 			{
 				__m256i h256 = { 0 };
-				__m256i* readPtr = (__m256i*)texDataU32;
+				__m256i* readPtr = (__m256i*)texDataU8;
 				memRange /= (288);
 				while (memRange--)
 				{
-					__m256i temp = _mm256_load_si256(readPtr);
+					__m256i temp = _mm256_loadu_si256(readPtr);
 					readPtr += (288 / 32);
 					h256 = _mm256_xor_si256(h256, temp);
 				}
@@ -183,12 +199,11 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			{
 				memRange /= (32 * sizeof(uint64));
 				uint64 h64 = 0;
-				uint64* texDataU64 = (uint64*)texDataU32;
 				while (memRange--)
 				{
-					h64 += *texDataU64;
+					h64 += LatteTC_ReadUnaligned<uint64>(texDataU8);
 					h64 = (h64 << 3) | (h64 >> 61);
-					texDataU64 += 32;
+					texDataU8 += 32 * sizeof(uint64);
 				}
 				hashVal = (h64 & 0xFFFFFFFF) + (h64 >> 32);
 			}
@@ -198,9 +213,9 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			memRange /= (512*sizeof(uint32));
 			while( memRange-- )
 			{
-				hashVal += *texDataU32;
+				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
 				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU32 += 512;
+				texDataU8 += 512 * sizeof(uint32);
 			}
 		}
 	}
@@ -218,15 +233,9 @@ bool LatteTC_HasTextureChanged(LatteTexture* hostTexture, bool force)
 	if (!LatteTC_IsRegisteredTexture(hostTexture))
 		return false;
 
-#if defined(__ANDROID__)
-	// The Android Vulkan path is sensitive to the CPU-side texture RAM hash scan
-	// during bursty effect workloads. Initial uploads, swizzle-triggered reloads,
-	// and GPU dynamic texture propagation still handle the common update paths,
-	// while skipping this scan avoids a hot SIGBUS path and saves CPU time.
-	(void)force;
-	return false;
-#endif
-
+	// Keep the normal texture invalidation path enabled on Android. The hash
+	// scan must stay alignment-safe because guest texture addresses are not
+	// guaranteed to satisfy ARM host load alignment.
 	if (hostTexture->forceInvalidate)
 	{
 		force = true;
