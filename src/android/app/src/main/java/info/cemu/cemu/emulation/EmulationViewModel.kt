@@ -47,6 +47,8 @@ data class SideMenuState(
     val isAsyncShaderCompileEnabled: Boolean = true,
     val skipGX2DrawDoneSync: Boolean = false,
     val skipAccurateBarriers: Boolean = false,
+    val isGamePadAudioEnabled: Boolean = false,
+    val gamePadVolume: Int = 0,
 )
 
 class ConditionFlags(
@@ -120,6 +122,8 @@ class EmulationViewModel(
                     isAsyncShaderCompileEnabled = NativeSettings.getAsyncShaderCompile(),
                     skipGX2DrawDoneSync = !savedGX2DrawDoneSync,
                     skipAccurateBarriers = !savedAccurateBarriers,
+                    isGamePadAudioEnabled = NativeSettings.getAudioDeviceEnabled(false),
+                    gamePadVolume = NativeSettings.getAudioDeviceVolume(false),
                 )
             }
         }
@@ -173,6 +177,16 @@ class EmulationViewModel(
 
         if (oldState.skipAccurateBarriers != sideMenuState.skipAccurateBarriers) {
             NativeSettings.setAccurateBarriers(!sideMenuState.skipAccurateBarriers)
+        }
+
+        if (oldState.isGamePadAudioEnabled != sideMenuState.isGamePadAudioEnabled) {
+            NativeSettings.setAudioDeviceEnabled(sideMenuState.isGamePadAudioEnabled, false)
+            shouldSaveSettings = true
+        }
+
+        if (oldState.gamePadVolume != sideMenuState.gamePadVolume) {
+            NativeSettings.setAudioDeviceVolume(sideMenuState.gamePadVolume, false)
+            shouldSaveSettings = true
         }
 
         if (shouldSaveSettings) {

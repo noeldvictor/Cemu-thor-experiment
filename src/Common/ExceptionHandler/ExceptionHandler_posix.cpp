@@ -15,6 +15,7 @@
 
 #if BOOST_PLAT_ANDROID
 #include <boost/stacktrace.hpp>
+#include <ucontext.h>
 #endif
 
 #if BOOST_OS_LINUX && !BOOST_PLAT_ANDROID
@@ -90,8 +91,14 @@ void handlerDumpingSignal(int sig, siginfo_t *info, void *context)
 	{
 		// should never be the case
 		printf("Unknown core dumping signal!\n");
-	}
+    }
     CrashLog_WriteLine(fmt::format("Error: signal {}:", sig));
+    CrashLog_WriteLine(fmt::format("Fault address: 0x{:016x}, code: {}", reinterpret_cast<uintptr_t>(info->si_addr), info->si_code));
+#if BOOST_PLAT_ANDROID && defined(__aarch64__)
+    auto* ucontext = reinterpret_cast<ucontext_t*>(context);
+    CrashLog_WriteLine(fmt::format("Native PC: 0x{:016x}", static_cast<uintptr_t>(ucontext->uc_mcontext.pc)));
+    CrashLog_WriteLine(fmt::format("Native LR: 0x{:016x}", static_cast<uintptr_t>(ucontext->uc_mcontext.regs[30])));
+#endif
 #if BOOST_PLAT_ANDROID
     CrashLog_WriteLine(to_string(boost::stacktrace::stacktrace()));
 #else

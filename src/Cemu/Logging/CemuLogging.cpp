@@ -154,6 +154,17 @@ fs::path cemuLog_GetLogFilePath()
     return ActiveSettings::GetUserDataPath("log.txt");
 }
 
+static void cemuLog_preservePreviousLog(const fs::path& path)
+{
+	std::error_code ec;
+	if (!fs::exists(path, ec) || fs::is_empty(path, ec))
+		return;
+
+	fs::path previousLogPath = path;
+	previousLogPath.replace_filename("log.previous.txt");
+	fs::copy_file(path, previousLogPath, fs::copy_options::overwrite_existing, ec);
+}
+
 void cemuLog_createLogFile(bool triggeredByCrash)
 {
 	std::unique_lock lock(LogContext.log_mutex);
@@ -161,6 +172,9 @@ void cemuLog_createLogFile(bool triggeredByCrash)
 		return;
 
 	const auto path = cemuLog_GetLogFilePath();
+	if (!triggeredByCrash)
+		cemuLog_preservePreviousLog(path);
+
 	LogContext.file_stream.open(path, std::ios::out);
 	if (LogContext.file_stream.fail())
 	{

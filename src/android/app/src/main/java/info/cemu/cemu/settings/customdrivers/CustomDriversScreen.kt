@@ -186,7 +186,7 @@ private fun TurnipDriverDownloadDialog(
         text = {
             Text(
                 tr(
-                    "Download a community Turnip Vulkan driver from K11MCH1/AdrenoToolsDrivers and select it for cemu_thor. Pick a specific version if you are following a recommendation."
+                    "Download a community Turnip Vulkan driver and select it for cemu_thor. Recommended uses Kimchi/K11MCH1; Choose includes StevenMXZ and Banners-Turnip builds if you are following a specific recommendation."
                 )
             )
         },
@@ -261,10 +261,14 @@ private fun TurnipDriverAssetListItem(
         )
         Text(
             text = if (driverAsset.isRecommended)
-                tr("{0} recommended", driverAsset.releaseName)
+                tr("{0} recommended", driverAsset.sourceName)
             else
-                driverAsset.releaseName,
+                driverAsset.sourceName,
             fontSize = 13.sp,
+        )
+        Text(
+            text = driverAsset.releaseName,
+            fontSize = 12.sp,
         )
     }
 }

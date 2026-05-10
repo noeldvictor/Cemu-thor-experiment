@@ -3,6 +3,25 @@
 #include "Cafe/HW/Espresso/Debugger/Debugger.h"
 #include "Cafe/HW/Espresso/Debugger/GDBStub.h"
 
+#include <cstring>
+
+namespace
+{
+template<typename T>
+T ppc_readUnaligned(const void* ptr)
+{
+	T value;
+	std::memcpy(&value, ptr, sizeof(T));
+	return value;
+}
+
+template<typename T>
+void ppc_writeUnaligned(void* ptr, T value)
+{
+	std::memcpy(ptr, &value, sizeof(T));
+}
+}
+
 class PPCItpCafeOSUsermode
 {
 public:
@@ -11,32 +30,33 @@ public:
 
 	inline static uint32 memory_readCodeU32(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		return _swapEndianU32(*(uint32*)(memory_base + address));
+		return _swapEndianU32(ppc_readUnaligned<uint32>(memory_base + address));
 	}
 
 	inline static void ppcMem_writeDataDouble(PPCInterpreter_t* hCPU, uint32 address, double vf)
 	{
-		uint64 v = *(uint64*)&vf;
-		uint32 v1 = v & 0xFFFFFFFF;
-		uint32 v2 = v >> 32;
-		uint8* ptr = memory_getPointerFromVirtualOffset(address);
-		*(uint32*)(ptr + 4) = CPU_swapEndianU32(v1);
-		*(uint32*)(ptr + 0) = CPU_swapEndianU32(v2);
+		uint64 v;
+		std::memcpy(&v, &vf, sizeof(v));
+		v = CPU_swapEndianU64(v);
+		ppc_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 	}
 
 	inline static void ppcMem_writeDataU64(PPCInterpreter_t* hCPU, uint32 address, uint64 v)
 	{
-		*(uint64*)(memory_getPointerFromVirtualOffset(address)) = CPU_swapEndianU64(v);
+		v = CPU_swapEndianU64(v);
+		ppc_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 	}
 
 	inline static void ppcMem_writeDataU32(PPCInterpreter_t* hCPU, uint32 address, uint32 v)
 	{
-		*(uint32*)(memory_getPointerFromVirtualOffset(address)) = CPU_swapEndianU32(v);
+		v = CPU_swapEndianU32(v);
+		ppc_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 	}
 
 	inline static void ppcMem_writeDataU16(PPCInterpreter_t* hCPU, uint32 address, uint16 v)
 	{
-		*(uint16*)(memory_getPointerFromVirtualOffset(address)) = CPU_swapEndianU16(v);
+		v = CPU_swapEndianU16(v);
+		ppc_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 	}
 
 	inline static void ppcMem_writeDataU8(PPCInterpreter_t* hCPU, uint32 address, uint8 v)
@@ -46,36 +66,37 @@ public:
 	
 	inline static double ppcMem_readDataDouble(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint32 v[2];
-		v[1] = *(uint32*)(memory_getPointerFromVirtualOffset(address));
-		v[0] = *(uint32*)(memory_getPointerFromVirtualOffset(address) + 4);
-		v[0] = CPU_swapEndianU32(v[0]);
-		v[1] = CPU_swapEndianU32(v[1]);
-		return *(double*)v;
+		uint64 v = ppc_readUnaligned<uint64>(memory_getPointerFromVirtualOffset(address));
+		v = CPU_swapEndianU64(v);
+		double result;
+		std::memcpy(&result, &v, sizeof(result));
+		return result;
 	}
 
 	inline static float ppcMem_readDataFloat(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint32 v = *(uint32*)(memory_getPointerFromVirtualOffset(address));
+		uint32 v = ppc_readUnaligned<uint32>(memory_getPointerFromVirtualOffset(address));
 		v = CPU_swapEndianU32(v);
-		return *(float*)&v;
+		float result;
+		std::memcpy(&result, &v, sizeof(result));
+		return result;
 	}
 
 	inline static uint64 ppcMem_readDataU64(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint64 v = *(uint64*)(memory_getPointerFromVirtualOffset(address));
+		uint64 v = ppc_readUnaligned<uint64>(memory_getPointerFromVirtualOffset(address));
 		return CPU_swapEndianU64(v);
 	}
 
 	inline static uint32 ppcMem_readDataU32(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint32 v = *(uint32*)(memory_getPointerFromVirtualOffset(address));
+		uint32 v = ppc_readUnaligned<uint32>(memory_getPointerFromVirtualOffset(address));
 		return CPU_swapEndianU32(v);
 	}
 
 	inline static uint16 ppcMem_readDataU16(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint16 v = *(uint16*)(memory_getPointerFromVirtualOffset(address));
+		uint16 v = ppc_readUnaligned<uint16>(memory_getPointerFromVirtualOffset(address));
 		return CPU_swapEndianU16(v);
 	}
 
@@ -86,12 +107,13 @@ public:
 
 	inline static uint64 ppcMem_readDataFloatEx(PPCInterpreter_t* hCPU, uint32 addr)
 	{
-		return ConvertToDoubleNoFTZ(_swapEndianU32(*(uint32*)(memory_base + addr)));
+		return ConvertToDoubleNoFTZ(_swapEndianU32(ppc_readUnaligned<uint32>(memory_base + addr)));
 	}
 
 	inline static void ppcMem_writeDataFloatEx(PPCInterpreter_t* hCPU, uint32 addr, uint64 value)
 	{
-		*(uint32*)(memory_base + addr) = _swapEndianU32(ConvertToSingleNoFTZ(value));
+		uint32 v = _swapEndianU32(ConvertToSingleNoFTZ(value));
+		ppc_writeUnaligned(memory_base + addr, v);
 	}
 
 	inline static uint64 getTB(PPCInterpreter_t* hCPU)
@@ -300,7 +322,7 @@ public:
 
 	static uint32 memory_readCodeU32(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		return _swapEndianU32(*(uint32*)(memory_base + ppcMem_translateVirtualCodeToPhysicalAddr(hCPU, address)));
+		return _swapEndianU32(ppc_readUnaligned<uint32>(memory_base + ppcMem_translateVirtualCodeToPhysicalAddr(hCPU, address)));
 	}
 
 	inline static uint8* ppcMem_getDataPtr(PPCInterpreter_t* hCPU, uint32 vAddr)
@@ -310,17 +332,16 @@ public:
 
 	inline static void ppcMem_writeDataDouble(PPCInterpreter_t* hCPU, uint32 address, double vf)
 	{
-		uint64 v = *(uint64*)&vf;
-		uint32 v1 = v & 0xFFFFFFFF;
-		uint32 v2 = v >> 32;
-		uint8* ptr = ppcMem_getDataPtr(hCPU, address);
-		*(uint32*)(ptr + 4) = CPU_swapEndianU32(v1);
-		*(uint32*)(ptr + 0) = CPU_swapEndianU32(v2);
+		uint64 v;
+		std::memcpy(&v, &vf, sizeof(v));
+		v = CPU_swapEndianU64(v);
+		ppc_writeUnaligned(ppcMem_getDataPtr(hCPU, address), v);
 	}
 
 	inline static void ppcMem_writeDataU64(PPCInterpreter_t* hCPU, uint32 address, uint64 v)
 	{
-		*(uint64*)(ppcMem_getDataPtr(hCPU, address)) = CPU_swapEndianU64(v);
+		v = CPU_swapEndianU64(v);
+		ppc_writeUnaligned(ppcMem_getDataPtr(hCPU, address), v);
 	}
 
 	inline static void ppcMem_writeDataU32(PPCInterpreter_t* hCPU, uint32 address, uint32 v)
@@ -334,12 +355,14 @@ public:
 			cemu_assert_unimplemented();
 			return;
 		}
-		*(uint32*)(memory_base + pAddr) = CPU_swapEndianU32(v);
+		v = CPU_swapEndianU32(v);
+		ppc_writeUnaligned(memory_base + pAddr, v);
 	}
 
 	inline static void ppcMem_writeDataU16(PPCInterpreter_t* hCPU, uint32 address, uint16 v)
 	{
-		*(uint16*)(ppcMem_getDataPtr(hCPU, address)) = CPU_swapEndianU16(v);
+		v = CPU_swapEndianU16(v);
+		ppc_writeUnaligned(ppcMem_getDataPtr(hCPU, address), v);
 	}
 
 	inline static void ppcMem_writeDataU8(PPCInterpreter_t* hCPU, uint32 address, uint8 v)
@@ -349,24 +372,25 @@ public:
 
 	inline static double ppcMem_readDataDouble(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint32 v[2];
-		v[1] = *(uint32*)(ppcMem_getDataPtr(hCPU, address));
-		v[0] = *(uint32*)(ppcMem_getDataPtr(hCPU, address) + 4);
-		v[0] = CPU_swapEndianU32(v[0]);
-		v[1] = CPU_swapEndianU32(v[1]);
-		return *(double*)v;
+		uint64 v = ppc_readUnaligned<uint64>(ppcMem_getDataPtr(hCPU, address));
+		v = CPU_swapEndianU64(v);
+		double result;
+		std::memcpy(&result, &v, sizeof(result));
+		return result;
 	}
 
 	inline static float ppcMem_readDataFloat(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint32 v = *(uint32*)(ppcMem_getDataPtr(hCPU, address));
+		uint32 v = ppc_readUnaligned<uint32>(ppcMem_getDataPtr(hCPU, address));
 		v = CPU_swapEndianU32(v);
-		return *(float*)&v;
+		float result;
+		std::memcpy(&result, &v, sizeof(result));
+		return result;
 	}
 
 	inline static uint64 ppcMem_readDataU64(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint64 v = *(uint64*)(ppcMem_getDataPtr(hCPU, address));
+		uint64 v = ppc_readUnaligned<uint64>(ppcMem_getDataPtr(hCPU, address));
 		return CPU_swapEndianU64(v);
 	}
 
@@ -391,13 +415,13 @@ public:
 			cemu_assert_unimplemented();
 			return 0;
 		}
-		uint32 v = *(uint32*)(memory_base + pAddr);
+		uint32 v = ppc_readUnaligned<uint32>(memory_base + pAddr);
 		return CPU_swapEndianU32(v);
 	}
 
 	inline static uint16 ppcMem_readDataU16(PPCInterpreter_t* hCPU, uint32 address)
 	{
-		uint16 v = *(uint16*)(ppcMem_getDataPtr(hCPU, address));
+		uint16 v = ppc_readUnaligned<uint16>(ppcMem_getDataPtr(hCPU, address));
 		return CPU_swapEndianU16(v);
 	}
 
@@ -414,12 +438,13 @@ public:
 
 	inline static uint64 ppcMem_readDataFloatEx(PPCInterpreter_t* hCPU, uint32 addr)
 	{
-		return ConvertToDoubleNoFTZ(_swapEndianU32(*(uint32*)(memory_base + addr)));
+		return ConvertToDoubleNoFTZ(_swapEndianU32(ppc_readUnaligned<uint32>(memory_base + addr)));
 	}
 
 	inline static void ppcMem_writeDataFloatEx(PPCInterpreter_t* hCPU, uint32 addr, uint64 value)
 	{
-		*(uint32*)(memory_base + addr) = _swapEndianU32(ConvertToSingleNoFTZ(value));
+		uint32 v = _swapEndianU32(ConvertToSingleNoFTZ(value));
+		ppc_writeUnaligned(memory_base + addr, v);
 	}
 
 	inline static uint64 getTB(PPCInterpreter_t* hCPU)

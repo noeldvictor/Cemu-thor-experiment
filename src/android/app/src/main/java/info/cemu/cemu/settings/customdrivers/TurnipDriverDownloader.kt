@@ -16,6 +16,7 @@ data class TurnipDriverDownload(
 )
 
 data class TurnipDriverAsset(
+    val sourceName: String,
     val fileName: String,
     val releaseName: String,
     val downloadUrl: String,
@@ -33,28 +34,22 @@ class TurnipDriverDownloader(
     }
 
     suspend fun fetchTurnipDriverAssets(): List<TurnipDriverAsset> {
-        val response = client.get(RELEASES_URL)
-        if (!response.status.isSuccess())
-            return emptyList()
-
-        val releases = json.decodeFromString<List<GithubRelease>>(response.body<String>())
-        val candidates = releases
-            .flatMapIndexed { releaseIndex, release ->
-                release.assets.map { GithubAssetCandidate(releaseIndex, release, it) }
-            }
-            .filter { isTurnipZip(it.asset.name) }
+        val candidates = DRIVER_SOURCES
+            .flatMap { source -> fetchSourceCandidates(source) }
             .sortedWith(
-                compareBy<GithubAssetCandidate> { it.releaseIndex }
+                compareBy<GithubAssetCandidate> { it.source.sortOrder }
+                    .thenBy { it.releaseIndex }
                     .thenBy { turnipAssetScore(it.asset.name) }
             )
 
-        return candidates.map {
+        return candidates.mapIndexed { index, it ->
             val releaseName = it.release.name ?: it.release.tagName
             TurnipDriverAsset(
+                sourceName = it.source.name,
                 fileName = it.asset.name,
                 releaseName = releaseName,
                 downloadUrl = it.asset.browserDownloadUrl,
-                isRecommended = turnipAssetScore(it.asset.name) == 0,
+                isRecommended = index == 0,
             )
         }
     }
@@ -77,24 +72,77 @@ class TurnipDriverDownloader(
     }
 
     private fun turnipAssetScore(fileName: String): Int {
-        val isStandardTurnip = fileName.startsWith("Turnip_", ignoreCase = true) &&
-                !fileName.contains("Gmem", ignoreCase = true) &&
-                !fileName.contains("Sysmem", ignoreCase = true)
+        val isStandardTurnip = fileName.startsWith("Turnip", ignoreCase = true) &&
+                SPECIALIZED_TURNIP_MARKERS.none { fileName.contains(it, ignoreCase = true) }
         return when {
             isStandardTurnip -> 0
-            !fileName.contains("Gmem", ignoreCase = true) &&
-                    !fileName.contains("Sysmem", ignoreCase = true) -> 1
+            SPECIALIZED_TURNIP_MARKERS.none { fileName.contains(it, ignoreCase = true) } -> 1
             else -> 2
         }
     }
 
+    private suspend fun fetchSourceCandidates(source: DriverSource): List<GithubAssetCandidate> {
+        val response = client.get(source.releasesUrl)
+        if (!response.status.isSuccess())
+            return emptyList()
+
+        val releases = json.decodeFromString<List<GithubRelease>>(response.body<String>())
+        return releases.flatMapIndexed { releaseIndex, release ->
+            release.assets
+                .filter { isTurnipZip(it.name) }
+                .map { GithubAssetCandidate(source, releaseIndex, release, it) }
+        }
+    }
+
     companion object {
-        private const val RELEASES_URL =
-            "https://api.github.com/repos/K11MCH1/AdrenoToolsDrivers/releases?per_page=30"
+        private val DRIVER_SOURCES = listOf(
+            DriverSource(
+                name = "Kimchi / K11MCH1",
+                repo = "K11MCH1/AdrenoToolsDrivers",
+                sortOrder = 0,
+            ),
+            DriverSource(
+                name = "StevenMXZ",
+                repo = "StevenMXZ/Adreno-Tools-Drivers",
+                sortOrder = 1,
+            ),
+            DriverSource(
+                name = "Banners-Turnip",
+                repo = "The412Banner/Banners-Turnip",
+                sortOrder = 2,
+            ),
+        )
+
+        private val SPECIALIZED_TURNIP_MARKERS = listOf(
+            "710",
+            "720",
+            "722",
+            "A8xx",
+            "CB_Perf_Fix",
+            "experimental",
+            "Gen8",
+            "Gmem",
+            "OneUI",
+            "patched",
+            "PREFER",
+            "PROFILED",
+            "Sysmem",
+            "Test",
+        )
     }
 }
 
+private data class DriverSource(
+    val name: String,
+    val repo: String,
+    val sortOrder: Int,
+) {
+    val releasesUrl: String
+        get() = "https://api.github.com/repos/$repo/releases?per_page=30"
+}
+
 private data class GithubAssetCandidate(
+    val source: DriverSource,
     val releaseIndex: Int,
     val release: GithubRelease,
     val asset: GithubAsset,

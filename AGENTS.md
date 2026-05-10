@@ -80,7 +80,7 @@ Keep the Sapphire dual-screen presentation work intact. The PAD screen should be
 
 The Android Back key is intentionally mapped to the same in-game menu toggle as the hotkey action, and predictive back callbacks are enabled in the Android manifest. The emulation side menu also includes a `Show FPS` toggle; enabling it turns on Cemu's native overlay at the top-left corner when the overlay was previously disabled and clears non-FPS overlay stats so copied desktop settings do not unexpectedly show CPU/RAM/debug overlays during gameplay.
 
-The emulation side menu is grouped into expandable sections. `Performance` includes `Show FPS`, `Async shader compile`, and session-only risky speed toggles for skipping GX2DrawDone sync and accurate Vulkan barriers. Keep those risky toggles off by default; they may improve FPS in some scenes but can destabilize games and should not be silently persisted.
+The emulation side menu is a two-panel drawer: the left rail selects `Display`, `Performance`, `Audio`, `Controls`, or `Tools`, and the right panel shows that section's controls. `Performance` includes `Show FPS`, `Async shader compile`, and session-only risky speed toggles for skipping GX2DrawDone sync and accurate Vulkan barriers. Keep those risky toggles off by default; they may improve FPS in some scenes but can destabilize games and should not be silently persisted. `Audio` includes `GamePad audio` and a `GamePad volume` slider.
 
 When smoke-testing dual screen, `dumpsys window windows` should show a `info.cemu.cemu_thor.debug` window on `mDisplayId=4` while `EmulationActivity` is on `displayId=0`.
 
@@ -88,7 +88,11 @@ When smoke-testing dual screen, `dumpsys window windows` should show a `info.cem
 
 Star Fox Zero USA (`00050000101b0400`) is a useful Android ARM64 recompiler stress test. The launch path tested on the Thor was `/storage/2664-21DE/Roms/wiiu/Star Fox Zero (USA) (En,Fr,Es).wux`.
 
-If the game is slow or exits cleanly with status 1, check `/sdcard/Android/data/info.cemu.cemu_thor.debug/files/log.txt` for `PPCRecompiler: Unsupported instruction`. Known ARM64 gaps fixed in this fork include indexed paired-single load/store (`psq_lx`/`psq_stx`), `ps_nabs`, `dcbzl`, `mfspr SPR_UPIR`, and `subfme`. A healthy startup smoke test should keep the process alive and show zero unsupported recompiler instructions after launch.
+If the game is slow or exits cleanly with status 1, check `/sdcard/Android/data/info.cemu.cemu_thor.debug/files/log.txt` or `/sdcard/Android/data/info.cemu.cemu_thor/files/log.txt` for `PPCRecompiler: Unsupported instruction`. Known ARM64 gaps fixed in this fork include indexed paired-single load/store (`psq_lx`/`psq_stx`), `ps_nabs`, `dcbzl`, `mfspr SPR_UPIR`, and `subfme`. A healthy startup smoke test should keep the process alive and show zero unsupported recompiler instructions after launch.
+
+Star Fox Zero also hit Android native `signal 7` crashes under laser/explosion load. One crash path symbolicated around texture-cache cleanup, so the Android texture cleanup scanner now snapshots the texture list and validates that entries are still registered before dereferencing them. The later reproducible shooting crash was a `SIGBUS` alignment fault in the HLE/coreinit atomic path: do not cast emulated Wii U RAM to host `std::atomic<T>` on Android. Use locked `memory_readU32/U64` and `memory_writeU32/U64` helpers instead, and keep fixed-width guest-memory helpers `memcpy`-based so ARM never performs under-aligned host loads/stores against guest memory.
+
+If Android reports `Process info.cemu.cemu_thor:EmulationProcess exited cleanly (1)`, it can still be Cemu's fatal handler exiting after writing to `log.txt`. Newer builds preserve the previous run as `/sdcard/Android/data/info.cemu.cemu_thor/files/log.previous.txt` before truncating `log.txt`, so check that file first after an unexpected reset.
 
 ## Existing Cemu Data Copy
 
@@ -103,4 +107,4 @@ This copies settings, keys, saves, shader cache, graphic packs, and `mlc01`. And
 
 ## Custom Turnip Drivers
 
-The Android custom driver screen has an opt-in Turnip download action. It can install the recommended Turnip package or list recent Turnip ZIP variants from `K11MCH1/AdrenoToolsDrivers` so a specific community-recommended build can be selected. Downloads install through the normal custom driver metadata validator and are selected automatically.
+The Android custom driver screen has an opt-in Turnip download action. It can install the recommended Turnip package or list recent Turnip ZIP variants from `K11MCH1/AdrenoToolsDrivers`, `StevenMXZ/Adreno-Tools-Drivers`, and `The412Banner/Banners-Turnip` so a specific community-recommended build can be selected. Downloads install through the normal custom driver metadata validator and are selected automatically.

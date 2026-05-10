@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -36,6 +37,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -65,6 +67,7 @@ import info.cemu.cemu.R
 import info.cemu.cemu.common.android.display.DisplayUtils
 import info.cemu.cemu.common.settings.GamePadPosition
 import info.cemu.cemu.common.settings.HotkeyAction
+import info.cemu.cemu.common.ui.components.Slider
 import info.cemu.cemu.common.ui.extensions.showMessage
 import info.cemu.cemu.common.ui.localization.tr
 import info.cemu.cemu.emulation.emulatedusbdevices.EmulatedUSBDevicesDialog
@@ -75,6 +78,7 @@ import info.cemu.cemu.emulation.inputoverlay.InputOverlaySurfaceView.InputMode.D
 import info.cemu.cemu.emulation.inputoverlay.InputOverlaySurfaceView.InputMode.EDIT_POSITION
 import info.cemu.cemu.emulation.inputoverlay.InputOverlaySurfaceView.InputMode.EDIT_SIZE
 import info.cemu.cemu.nativeinterface.NativeEmulation
+import info.cemu.cemu.nativeinterface.NativeSettings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -164,39 +168,37 @@ fun EmulationScreen(
         drawerState = drawerState,
         gesturesEnabled = drawerState.isOpen,
         drawerContent = {
-            ModalDrawerSheet {
-                Column(
+            ModalDrawerSheet(
+                modifier = Modifier.width(520.dp),
+            ) {
+                EmulationSideMenuContent(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
-                        .width(320.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    EmulationSideMenuContent(
-                        sideMenuState = sideMenuState,
-                        updateState = {
-                            viewModel.updateSideMenuState(it)
-                            setMotionSensorEnabled(it.isMotionEnabled)
-                            NativeEmulation.setReplaceTVWithPadView(it.isTVReplacedWithPad)
-                        },
-                        onEditInputOverlay = {
-                            snackbarHostState.showMessage(scope, tr("Edit input positions"))
-                            inputOverlayInputMode = EDIT_POSITION
-                            closeDrawer()
-                        },
-                        onResetInputOverlay = {
-                            viewModel.resetInputOverlayLayout()
-                            closeDrawer()
-                        },
-                        onQuit = {
-                            showQuitConfirmationDialog = true
-                            closeDrawer()
-                        },
-                        onShowEmulatedUSBDevices = {
-                            showEmulatedUSBDevices = true
-                            closeDrawer()
-                        },
-                    )
-                }
+                        .fillMaxWidth(),
+                    sideMenuState = sideMenuState,
+                    updateState = {
+                        viewModel.updateSideMenuState(it)
+                        setMotionSensorEnabled(it.isMotionEnabled)
+                        NativeEmulation.setReplaceTVWithPadView(it.isTVReplacedWithPad)
+                    },
+                    onEditInputOverlay = {
+                        snackbarHostState.showMessage(scope, tr("Edit input positions"))
+                        inputOverlayInputMode = EDIT_POSITION
+                        closeDrawer()
+                    },
+                    onResetInputOverlay = {
+                        viewModel.resetInputOverlayLayout()
+                        closeDrawer()
+                    },
+                    onQuit = {
+                        showQuitConfirmationDialog = true
+                        closeDrawer()
+                    },
+                    onShowEmulatedUSBDevices = {
+                        showEmulatedUSBDevices = true
+                        closeDrawer()
+                    },
+                )
             }
         },
     ) {
@@ -308,8 +310,17 @@ private fun EditInputsLayout(
     }
 }
 
+private enum class SideMenuSection {
+    DISPLAY,
+    PERFORMANCE,
+    AUDIO,
+    CONTROLS,
+    TOOLS,
+}
+
 @Composable
 private fun EmulationSideMenuContent(
+    modifier: Modifier = Modifier,
     sideMenuState: SideMenuState,
     updateState: (SideMenuState) -> Unit,
     onShowEmulatedUSBDevices: () -> Unit,
@@ -317,7 +328,124 @@ private fun EmulationSideMenuContent(
     onResetInputOverlay: () -> Unit,
     onQuit: () -> Unit,
 ) {
-    MenuSection(title = tr("Display"), defaultExpanded = true) {
+    var selectedSection by rememberSaveable { mutableStateOf(SideMenuSection.DISPLAY) }
+
+    Row(modifier = modifier.fillMaxHeight()) {
+        Column(
+            modifier = Modifier
+                .width(160.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            SideMenuNavItem(
+                label = tr("Display"),
+                selected = selectedSection == SideMenuSection.DISPLAY,
+                onClick = { selectedSection = SideMenuSection.DISPLAY },
+            )
+            SideMenuNavItem(
+                label = tr("Performance"),
+                selected = selectedSection == SideMenuSection.PERFORMANCE,
+                onClick = { selectedSection = SideMenuSection.PERFORMANCE },
+            )
+            SideMenuNavItem(
+                label = tr("Audio"),
+                selected = selectedSection == SideMenuSection.AUDIO,
+                onClick = { selectedSection = SideMenuSection.AUDIO },
+            )
+            SideMenuNavItem(
+                label = tr("Controls"),
+                selected = selectedSection == SideMenuSection.CONTROLS,
+                onClick = { selectedSection = SideMenuSection.CONTROLS },
+            )
+            SideMenuNavItem(
+                label = tr("Tools"),
+                selected = selectedSection == SideMenuSection.TOOLS,
+                onClick = { selectedSection = SideMenuSection.TOOLS },
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            TextButtonItem(
+                label = tr("Exit"),
+                onClick = onQuit,
+            )
+        }
+
+        VerticalDivider(modifier = Modifier.fillMaxHeight())
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 8.dp)
+        ) {
+            Text(
+                text = selectedSection.title(),
+                modifier = Modifier.padding(8.dp),
+                fontSize = 20.sp,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(bottom = 4.dp))
+
+            when (selectedSection) {
+                SideMenuSection.DISPLAY -> DisplayMenuContent(sideMenuState, updateState)
+                SideMenuSection.PERFORMANCE -> PerformanceMenuContent(sideMenuState, updateState)
+                SideMenuSection.AUDIO -> AudioMenuContent(sideMenuState, updateState)
+                SideMenuSection.CONTROLS -> ControlsMenuContent(
+                    sideMenuState = sideMenuState,
+                    updateState = updateState,
+                    onEditInputOverlay = onEditInputOverlay,
+                    onResetInputOverlay = onResetInputOverlay,
+                )
+                SideMenuSection.TOOLS -> ToolsMenuContent(onShowEmulatedUSBDevices)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SideMenuSection.title(): String = when (this) {
+    SideMenuSection.DISPLAY -> tr("Display")
+    SideMenuSection.PERFORMANCE -> tr("Performance")
+    SideMenuSection.AUDIO -> tr("Audio")
+    SideMenuSection.CONTROLS -> tr("Controls")
+    SideMenuSection.TOOLS -> tr("Tools")
+}
+
+@Composable
+private fun SideMenuNavItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .minimumInteractiveComponentSize(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier
+                .padding(end = 8.dp)
+                .weight(1f),
+            fontSize = if (selected) 17.sp else 16.sp,
+        )
+
+        Icon(
+            painter = painterResource(id = R.drawable.ic_chevron_right),
+            contentDescription = null,
+            modifier = Modifier.alpha(if (selected) 1f else 0f),
+        )
+    }
+}
+
+@Composable
+private fun DisplayMenuContent(
+    sideMenuState: SideMenuState,
+    updateState: (SideMenuState) -> Unit,
+) {
         CheckboxItem(
             label = tr("Show PAD"),
             checked = sideMenuState.isPadVisible,
@@ -349,9 +477,13 @@ private fun EmulationSideMenuContent(
             onCheckedChange = { updateState(sideMenuState.copy(isExternalScreenRotatedLeft = it)) },
             enabled = sideMenuState.isPadOnExternalDisplay,
         )
-    }
+}
 
-    MenuSection(title = tr("Performance"), defaultExpanded = true) {
+@Composable
+private fun PerformanceMenuContent(
+    sideMenuState: SideMenuState,
+    updateState: (SideMenuState) -> Unit,
+) {
         CheckboxItem(
             label = tr("Show FPS"),
             checked = sideMenuState.isFPSOverlayVisible,
@@ -375,9 +507,45 @@ private fun EmulationSideMenuContent(
             checked = sideMenuState.skipAccurateBarriers,
             onCheckedChange = { updateState(sideMenuState.copy(skipAccurateBarriers = it)) },
         )
-    }
+}
 
-    MenuSection(title = tr("Controls"), defaultExpanded = sideMenuState.isInputOverlayVisible) {
+@Composable
+private fun AudioMenuContent(
+    sideMenuState: SideMenuState,
+    updateState: (SideMenuState) -> Unit,
+) {
+    CheckboxItem(
+        label = tr("GamePad audio"),
+        checked = sideMenuState.isGamePadAudioEnabled,
+        onCheckedChange = { enabled ->
+            updateState(
+                sideMenuState.copy(
+                    isGamePadAudioEnabled = enabled,
+                    gamePadVolume = if (enabled && sideMenuState.gamePadVolume == 0) 50 else sideMenuState.gamePadVolume,
+                )
+            )
+        },
+    )
+
+    Slider(
+        label = tr("GamePad volume"),
+        value = sideMenuState.gamePadVolume,
+        valueFrom = NativeSettings.AUDIO_MIN_VOLUME,
+        steps = 19,
+        valueTo = NativeSettings.AUDIO_MAX_VOLUME,
+        enabled = sideMenuState.isGamePadAudioEnabled,
+        onValueChange = { updateState(sideMenuState.copy(gamePadVolume = it)) },
+        labelFormatter = { "$it%" },
+    )
+}
+
+@Composable
+private fun ControlsMenuContent(
+    sideMenuState: SideMenuState,
+    updateState: (SideMenuState) -> Unit,
+    onEditInputOverlay: () -> Unit,
+    onResetInputOverlay: () -> Unit,
+) {
         CheckboxItem(
             label = tr("Enable motion"),
             checked = sideMenuState.isMotionEnabled,
@@ -401,58 +569,14 @@ private fun EmulationSideMenuContent(
             enabled = sideMenuState.isInputOverlayVisible,
             onClick = onResetInputOverlay,
         )
-    }
-
-    MenuSection(title = tr("Tools"), defaultExpanded = false) {
-        TextButtonItem(
-            label = tr("Emulated USB Devices"),
-            onClick = onShowEmulatedUSBDevices,
-        )
-    }
-
-    TextButtonItem(
-        label = tr("Exit"),
-        onClick = onQuit,
-    )
 }
 
 @Composable
-private fun MenuSection(
-    title: String,
-    defaultExpanded: Boolean,
-    content: @Composable () -> Unit,
-) {
-    var expanded by rememberSaveable(title) { mutableStateOf(defaultExpanded) }
-
-    HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = !expanded }
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .minimumInteractiveComponentSize(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            modifier = Modifier
-                .padding(end = 8.dp)
-                .weight(1f),
-            fontSize = 14.sp,
-        )
-
-        Icon(
-            painter = painterResource(
-                id = if (expanded) R.drawable.ic_arrow_drop_down else R.drawable.ic_chevron_right
-            ),
-            contentDescription = null,
-        )
-    }
-
-    if (expanded) {
-        content()
-    }
+private fun ToolsMenuContent(onShowEmulatedUSBDevices: () -> Unit) {
+    TextButtonItem(
+        label = tr("Emulated USB Devices"),
+        onClick = onShowEmulatedUSBDevices,
+    )
 }
 
 @Composable

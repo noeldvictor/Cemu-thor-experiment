@@ -5,8 +5,27 @@
 #include "util/MemMapper/MemMapper.h"
 #include "config/ActiveSettings.h"
 
+#include <cstring>
+
 uint8* memory_base = NULL; // base address of the reserved 4GB space
 uint8* memory_elfCodeArena = NULL;
+
+namespace
+{
+template<typename T>
+T memory_readUnaligned(const void* ptr)
+{
+	T value;
+	std::memcpy(&value, ptr, sizeof(T));
+	return value;
+}
+
+template<typename T>
+void memory_writeUnaligned(void* ptr, T value)
+{
+	std::memcpy(ptr, &value, sizeof(T));
+}
+}
 
 void checkMemAlloc(void* result)
 {
@@ -305,33 +324,36 @@ uint8* memory_getPointerFromVirtualOffsetAllowNull(uint32 virtualOffset)
 // write access
 void memory_writeDouble(uint32 address, double vf)
 {
-	uint64 v = *(uint64*)&vf;
-	uint32 v1 = v&0xFFFFFFFF;
-	uint32 v2 = v>>32;
-	uint8* ptr = memory_getPointerFromVirtualOffset(address);
-	*(uint32*)(ptr+4) = CPU_swapEndianU32(v1);
-	*(uint32*)(ptr+0) = CPU_swapEndianU32(v2);
+	uint64 v;
+	std::memcpy(&v, &vf, sizeof(v));
+	v = CPU_swapEndianU64(v);
+	memory_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 }
 
 void memory_writeFloat(uint32 address, float vf)
 {
-	uint32 v = *(uint32*)&vf;
-	*(uint32*)(memory_getPointerFromVirtualOffset(address)) = CPU_swapEndianU32(v);
+	uint32 v;
+	std::memcpy(&v, &vf, sizeof(v));
+	v = CPU_swapEndianU32(v);
+	memory_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 }
 
 void memory_writeU32(uint32 address, uint32 v)
 {
-	*(uint32*)(memory_getPointerFromVirtualOffset(address)) = CPU_swapEndianU32(v);
+	v = CPU_swapEndianU32(v);
+	memory_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 }
 
 void memory_writeU64(uint32 address, uint64 v)
 {
-	*(uint64*)(memory_getPointerFromVirtualOffset(address)) = CPU_swapEndianU64(v);
+	v = CPU_swapEndianU64(v);
+	memory_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 }
 
 void memory_writeU16(uint32 address, uint16 v)
 {
-	*(uint16*)(memory_getPointerFromVirtualOffset(address)) = CPU_swapEndianU16(v);
+	v = CPU_swapEndianU16(v);
+	memory_writeUnaligned(memory_getPointerFromVirtualOffset(address), v);
 }
 
 void memory_writeU8(uint32 address, uint8 v)
@@ -343,36 +365,37 @@ void memory_writeU8(uint32 address, uint8 v)
 
 double memory_readDouble(uint32 address)
 {
-	uint32 v[2];
-	v[1] = *(uint32*)(memory_getPointerFromVirtualOffset(address));
-	v[0] = *(uint32*)(memory_getPointerFromVirtualOffset(address)+4);
-	v[0] = CPU_swapEndianU32(v[0]);
-	v[1] = CPU_swapEndianU32(v[1]);
-	return *(double*)v;
+	uint64 v = memory_readUnaligned<uint64>(memory_getPointerFromVirtualOffset(address));
+	v = CPU_swapEndianU64(v);
+	double result;
+	std::memcpy(&result, &v, sizeof(result));
+	return result;
 }
 
 float memory_readFloat(uint32 address)
 {
-	uint32 v = *(uint32*)(memory_getPointerFromVirtualOffset(address));
+	uint32 v = memory_readUnaligned<uint32>(memory_getPointerFromVirtualOffset(address));
 	v = CPU_swapEndianU32(v);
-	return *(float*)&v;
+	float result;
+	std::memcpy(&result, &v, sizeof(result));
+	return result;
 }
 
 uint64 memory_readU64(uint32 address)
 {
-	uint64 v = *(uint64*)(memory_getPointerFromVirtualOffset(address));
+	uint64 v = memory_readUnaligned<uint64>(memory_getPointerFromVirtualOffset(address));
 	return CPU_swapEndianU64(v);
 }
 
 uint32 memory_readU32(uint32 address)
 {
-	uint32 v = *(uint32*)(memory_getPointerFromVirtualOffset(address));
+	uint32 v = memory_readUnaligned<uint32>(memory_getPointerFromVirtualOffset(address));
 	return CPU_swapEndianU32(v);
 }
 
 uint16 memory_readU16(uint32 address)
 {
-	uint16 v = *(uint16*)(memory_getPointerFromVirtualOffset(address));
+	uint16 v = memory_readUnaligned<uint16>(memory_getPointerFromVirtualOffset(address));
 	return CPU_swapEndianU16(v);
 }
 

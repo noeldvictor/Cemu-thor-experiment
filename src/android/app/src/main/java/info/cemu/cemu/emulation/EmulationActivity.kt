@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -131,6 +132,7 @@ class EmulationActivity : AppCompatActivity() {
         inputManager = InputDelegateManager(this)
 
         setupHotkeys()
+        setupBackMenuToggle()
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -172,6 +174,14 @@ class EmulationActivity : AppCompatActivity() {
                     .collect { HotkeyManager.setHotkeyMappings(it) }
             }
         }
+    }
+
+    private fun setupBackMenuToggle() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                HotkeyManager.triggerAction(HotkeyAction.TOGGLE_MENU)
+            }
+        })
     }
 
     private fun setFullscreen() {

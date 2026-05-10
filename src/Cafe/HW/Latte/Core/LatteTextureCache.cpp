@@ -8,17 +8,26 @@ std::unordered_set<LatteTexture*> g_allTextures;
 
 void LatteTC_Init()
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	cemu_assert_debug(g_allTextures.empty());
 }
 
 void LatteTC_RegisterTexture(LatteTexture* tex)
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	g_allTextures.emplace(tex);
 }
 
 void LatteTC_UnregisterTexture(LatteTexture* tex)
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	g_allTextures.erase(tex);
+}
+
+bool LatteTC_IsRegisteredTexture(LatteTexture* tex)
+{
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
+	return tex && g_allTextures.find(tex) != g_allTextures.end();
 }
 
 // sample few uint64s uniformly over memory range
@@ -45,6 +54,10 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 	{
 		return 0;
 	}
+	uint32 memRange = hostTexture->texDataPtrHigh - hostTexture->texDataPtrLow;
+	if (!memory_isAddressRangeAccessible(memory_physicalToVirtual(hostTexture->texDataPtrLow), memRange))
+		return hostTexture->texDataHash2;
+
 	if (hostTexture->format == Latte::E_GX2SURFFMT::R11_G11_B10_FLOAT)
 	{
 		// this is an exotic format that usually isn't generated or updated CPU-side
@@ -63,7 +76,6 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 		return texDataU32[0] ^ texDataU32[1] ^ texDataU32[2] ^ texDataU32[3];
 	}
 
-	uint32 memRange = hostTexture->texDataPtrHigh - hostTexture->texDataPtrLow;
 	uint32* texDataU32 = (uint32*)memory_getPointerFromPhysicalOffset(hostTexture->texDataPtrLow);
 	uint32 hashVal = 0;
 	uint32 pixelCount = hostTexture->width*hostTexture->height;
@@ -200,6 +212,21 @@ uint64 _botwLargeTexHax = 0;
 
 bool LatteTC_HasTextureChanged(LatteTexture* hostTexture, bool force)
 {
+#if defined(__ANDROID__)
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
+#endif
+	if (!LatteTC_IsRegisteredTexture(hostTexture))
+		return false;
+
+#if defined(__ANDROID__)
+	// The Android Vulkan path is sensitive to the CPU-side texture RAM hash scan
+	// during bursty effect workloads. Initial uploads, swizzle-triggered reloads,
+	// and GPU dynamic texture propagation still handle the common update paths,
+	// while skipping this scan avoids a hot SIGBUS path and saves CPU time.
+	(void)force;
+	return false;
+#endif
+
 	if (hostTexture->forceInvalidate)
 	{
 		force = true;
@@ -246,6 +273,12 @@ bool LatteTC_HasTextureChanged(LatteTexture* hostTexture, bool force)
 
 void LatteTC_ResetTextureChangeTracker(LatteTexture* hostTexture, bool force)
 {
+#if defined(__ANDROID__)
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
+#endif
+	if (!LatteTC_IsRegisteredTexture(hostTexture))
+		return;
+
 	if( hostTexture->lastDataUpdateFrameCounter == LatteGPUState.frameCounter && force == false)
 		return;
 	hostTexture->lastDataUpdateFrameCounter = LatteGPUState.frameCounter;
@@ -258,13 +291,31 @@ void LatteTC_ResetTextureChangeTracker(LatteTexture* hostTexture, bool force)
  */
 void LatteTC_MarkTextureStillInUse(LatteTexture* texture)
 {
+#if defined(__ANDROID__)
+	// Android currently disables texture GC and low-memory texture eviction, so
+	// these timestamps are not consumed there. Avoid touching texture pointers
+	// that can be stale during aggressive Vulkan view/texture aliasing.
+	(void)texture;
+	return;
+#else
+	if (!LatteTC_IsRegisteredTexture(texture))
+		return;
+
 	texture->lastAccessTick = LatteGPUState.currentDrawCallTick;
 	texture->lastAccessFrameCount = LatteGPUState.frameCounter;
+#endif
 }
 
 // check if a texture has been overwritten by another texture using GPU-writes
 bool LatteTC_IsTextureDataOverwritten(LatteTexture* texture)
 {
+#if defined(__ANDROID__)
+	(void)texture;
+	return false;
+#else
+	if (!LatteTC_IsRegisteredTexture(texture) || !texture->sliceMipInfo)
+		return false;
+
 	// check overlaps
 	sint32 mipLevels = texture->mipLevels;
 	sint32 sliceCount = texture->depth;
@@ -279,24 +330,36 @@ bool LatteTC_IsTextureDataOverwritten(LatteTexture* texture)
 		for (sint32 sliceIndex = 0; sliceIndex < mipSliceCount; sliceIndex++)
 		{
 			LatteTextureSliceMipInfo* sliceMipInfo = texture->sliceMipInfo + texture->GetSliceMipArrayIndex(sliceIndex, mipIndex);
+			if (!LatteTexture_IsOwnedSliceMipInfo(texture, sliceMipInfo))
+				return false;
 			bool isSliceMipOutdated = false;
-			for (auto& overlapData : sliceMipInfo->list_dataOverlap)
+			for (auto overlapItr = sliceMipInfo->list_dataOverlap.begin(); overlapItr != sliceMipInfo->list_dataOverlap.end();)
 			{
+				auto& overlapData = *overlapItr;
+				if (!LatteTC_IsRegisteredTexture(overlapData.destTexture) ||
+					!LatteTexture_IsOwnedSliceMipInfo(overlapData.destTexture, overlapData.destMipSliceInfo))
+				{
+					overlapItr = sliceMipInfo->list_dataOverlap.erase(overlapItr);
+					continue;
+				}
 				if (sliceMipInfo->lastDynamicUpdate < overlapData.destMipSliceInfo->lastDynamicUpdate)
 				{
 					isSliceMipOutdated = true;
 					break;
 				}
+				++overlapItr;
 			}
 			if (isSliceMipOutdated == false)
 				return false;
 		}
 	}
 	return true;
+#endif
 }
 
 void LatteTexture_Delete(LatteTexture* texture)
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	LatteTC_UnregisterTexture(texture);
 	LatteMRT::NotifyTextureDeletion(texture);
 	LatteTextureReadback_NotifyTextureDeletion(texture);
@@ -325,6 +388,9 @@ void LatteTexture_Delete(LatteTexture* texture)
  */
 bool LatteTC_CleanupCheckTexture(LatteTexture* texture, uint32 currentTick)
 {
+	if (!LatteTC_IsRegisteredTexture(texture))
+		return false;
+
 	uint32 currentFrameCount = LatteGPUState.frameCounter;
 	uint32 ticksSinceLastAccess = currentTick - texture->lastAccessTick;
 	uint32 framesSinceLastAccess = currentFrameCount - texture->lastAccessFrameCount;
@@ -345,6 +411,7 @@ bool LatteTC_CleanupCheckTexture(LatteTexture* texture, uint32 currentTick)
 		return true;
 	}
 	// if unused for more than 5 seconds, start deleting views since they are cheap to recreate
+#if !defined(__ANDROID__)
 	if (ticksSinceLastAccess >= 5 * 1000 && framesSinceLastAccess >= 30)
 	{
 		for (sint32 i = 0; i < 3; i++)
@@ -357,6 +424,7 @@ bool LatteTC_CleanupCheckTexture(LatteTexture* texture, uint32 currentTick)
 			delete view;
 		}
 	}
+#endif
 	return false;
 }
 
@@ -368,10 +436,14 @@ void LatteTexture_RefreshInfoCache();
  */
 void LatteTC_CleanupUnusedTextures()
 {
+#if defined(__ANDROID__)
+	return;
+#else
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	static size_t currentScanIndex = 0;
 	uint32 currentTick = GetTickCount();
 	sint32 maxDelete = 10;
-	std::vector<LatteTexture*>& allTextures = LatteTexture::GetAllTextures();
+	std::vector<LatteTexture*> allTextures = LatteTexture_GetAllTexturesSnapshot();
 	if (!allTextures.empty())
 	{
 		for (sint32 c = 0; c < 25; c++)
@@ -380,23 +452,26 @@ void LatteTC_CleanupUnusedTextures()
 				currentScanIndex = 0;
 			LatteTexture* texItr = allTextures[currentScanIndex];
 			currentScanIndex++;
-			if (!texItr)
+			if (!LatteTC_IsRegisteredTexture(texItr))
 				continue;
 			if (LatteTC_CleanupCheckTexture(texItr, currentTick))
 			{
 				maxDelete--;
 				if (maxDelete <= 0)
 					break; // deleting can be an expensive operation, dont delete too many at once to avoid micro stutter
-				if (allTextures.empty())
-					break;
 			}
 		}
 	}
 	LatteTexture_RefreshInfoCache(); // find a better place to call this from?
+#endif
 }
 
 std::vector<LatteTexture*> LatteTC_GetDeleteableTextures()
 {
+#if defined(__ANDROID__)
+	return {};
+#else
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	std::vector<LatteTexture*> texList;
 	uint32 currentFrameCount = LatteGPUState.frameCounter;
 
@@ -419,11 +494,13 @@ std::vector<LatteTexture*> LatteTC_GetDeleteableTextures()
 	}
 
 	return texList;
+#endif
 }
 
 void LatteTC_UnloadAllTextures()
 {
-	std::vector<LatteTexture*> allTexturesCopy = LatteTexture::GetAllTextures();
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
+	std::vector<LatteTexture*> allTexturesCopy = LatteTexture_GetAllTexturesSnapshot();
 	for (auto& itr : allTexturesCopy)
 	{
 		if(itr)

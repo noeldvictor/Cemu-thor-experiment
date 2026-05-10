@@ -9,6 +9,7 @@
 #include "Cafe/GraphicPack/GraphicPack2.h"
 
 #include <boost/container/small_vector.hpp>
+#include <cstdint>
 
 struct TexMemOccupancyEntry
 {
@@ -43,6 +44,22 @@ std::vector<LatteTextureInformation> LatteTexture_QueryCacheInfo()
 			return std::vector<LatteTextureInformation>();
 	}
 	return s_cacheInfoList;
+}
+
+bool LatteTexture_IsOwnedSliceMipInfo(LatteTexture* texture, LatteTextureSliceMipInfo* sliceMipInfo)
+{
+	if (!texture || !sliceMipInfo || !texture->sliceMipInfo || texture->depth <= 0 || texture->mipLevels <= 0)
+		return false;
+
+	const auto arraySize = texture->GetSliceMipArraySize();
+	const auto base = reinterpret_cast<uintptr_t>(texture->sliceMipInfo);
+	const auto candidate = reinterpret_cast<uintptr_t>(sliceMipInfo);
+	const auto byteSize = static_cast<uintptr_t>(arraySize) * sizeof(LatteTextureSliceMipInfo);
+	if (candidate < base || candidate >= base + byteSize)
+		return false;
+	if (((candidate - base) % sizeof(LatteTextureSliceMipInfo)) != 0)
+		return false;
+	return sliceMipInfo->texture == texture;
 }
 
 void LatteTexture_RefreshInfoCache()
@@ -662,10 +679,18 @@ void LatteTexture_TrackTextureRelation(LatteTexture* texture1, LatteTexture* tex
 
 void LatteTexture_TrackDataOverlap(LatteTexture* texture, LatteTextureSliceMipInfo* sliceMipInfo, TexMemOccupancyEntry& occupancy)
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	// todo - handle tile thickness and z offset
 
 	// todo - check address range overlap
 	auto& occMipSliceInfo = occupancy.sliceMipInfo;
+	if (!LatteTexture_IsOwnedSliceMipInfo(texture, sliceMipInfo) ||
+		!occMipSliceInfo ||
+		!LatteTC_IsRegisteredTexture(occMipSliceInfo->texture) ||
+		!LatteTexture_IsOwnedSliceMipInfo(occMipSliceInfo->texture, occMipSliceInfo))
+	{
+		return;
+	}
 
 	if ((sliceMipInfo->addrEnd > occMipSliceInfo->addrStart && sliceMipInfo->addrStart < occMipSliceInfo->addrEnd) == false)
 		return;
@@ -690,8 +715,15 @@ void LatteTexture_TrackDataOverlap(LatteTexture* texture, LatteTextureSliceMipIn
 
 void _LatteTexture_RemoveDataOverlapTracking(LatteTexture* texture, LatteTextureSliceMipInfo* sliceMipInfo, LatteTextureSliceMipDataOverlap_t& dataOverlap)
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	LatteTexture* destTexture = dataOverlap.destTexture;
 	LatteTextureSliceMipInfo* destSliceMipInfo = dataOverlap.destMipSliceInfo;
+	if (!LatteTC_IsRegisteredTexture(destTexture) ||
+		!LatteTexture_IsOwnedSliceMipInfo(texture, sliceMipInfo) ||
+		!LatteTexture_IsOwnedSliceMipInfo(destTexture, destSliceMipInfo))
+	{
+		return;
+	}
 	// delete from dest
 	for (auto it = destSliceMipInfo->list_dataOverlap.begin(); it != destSliceMipInfo->list_dataOverlap.end();)
 	{
@@ -706,9 +738,11 @@ void _LatteTexture_RemoveDataOverlapTracking(LatteTexture* texture, LatteTexture
 
 void LatteTexture_DeleteDataOverlapTracking(LatteTexture* texture, LatteTextureSliceMipInfo* sliceMipInfo)
 {
-	for(auto& it : sliceMipInfo->list_dataOverlap)
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
+	auto overlapList = sliceMipInfo->list_dataOverlap;
+	for(auto& it : overlapList)
 		_LatteTexture_RemoveDataOverlapTracking(texture, sliceMipInfo, it);
-	sliceMipInfo->list_dataOverlap.resize(0);
+	sliceMipInfo->list_dataOverlap.clear();
 }
 
 void LatteTexture_DeleteDataOverlapTracking(LatteTexture* texture)
@@ -1167,11 +1201,18 @@ LatteTextureSliceMipInfo* LatteTexture::GetSliceMipArrayEntry(sint32 sliceIndex,
 	return sliceMipInfo + GetSliceMipArrayIndex(sliceIndex, mipIndex);
 }
 
+std::recursive_mutex sTextureRegistryMutex;
 std::vector<LatteTexture*> sAllTextures; // entries can be nullptr
 std::vector<size_t> sAllTextureFreeIndices;
 
+std::recursive_mutex& LatteTexture_GetRegistryMutex()
+{
+	return sTextureRegistryMutex;
+}
+
 void _AddTextureToGlobalList(LatteTexture* tex)
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	if (sAllTextureFreeIndices.empty())
 	{
 		tex->globalListIndex = sAllTextures.size();
@@ -1186,6 +1227,7 @@ void _AddTextureToGlobalList(LatteTexture* tex)
 
 void _RemoveTextureFromGlobalList(LatteTexture* tex)
 {
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	cemu_assert_debug(tex->globalListIndex >= 0 && tex->globalListIndex < sAllTextures.size());
 	cemu_assert_debug(sAllTextures[tex->globalListIndex] == tex);
 	if (tex->globalListIndex + 1 == sAllTextures.size())
@@ -1200,6 +1242,12 @@ void _RemoveTextureFromGlobalList(LatteTexture* tex)
 
 std::vector<LatteTexture*>& LatteTexture::GetAllTextures()
 {
+	return sAllTextures;
+}
+
+std::vector<LatteTexture*> LatteTexture_GetAllTexturesSnapshot()
+{
+	std::lock_guard lock(LatteTexture_GetRegistryMutex());
 	return sAllTextures;
 }
 

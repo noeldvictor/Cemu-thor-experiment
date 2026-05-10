@@ -79,9 +79,9 @@ LatteTextureView* LatteTexture_CreateTexture(Latte::E_DIM dim, MPTR physAddress,
 	LatteTexture_RegisterTextureMemoryOccupancy(tex);
 	cemu_assert_debug(mipLevels != 0);
 
+	LatteTC_RegisterTexture(tex);
 	LatteTexture_ReloadData(tex);
 	LatteTC_MarkTextureStillInUse(tex);
-	LatteTC_RegisterTexture(tex);
 
 	// create initial view that maps to the whole texture
 	tex->baseView = tex->GetOrCreateView(0, tex->mipLevels, 0, tex->depth);

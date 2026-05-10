@@ -1,5 +1,6 @@
 #pragma once
 #include "Cafe/HW/Latte/Core/LatteConst.h"
+#include <mutex>
 
 struct LatteSamplerState
 {
@@ -327,11 +328,14 @@ void LatteTexture_init();
 void LatteTexture_updateTextures();
 
 std::vector<LatteTextureInformation> LatteTexture_QueryCacheInfo();
+std::recursive_mutex& LatteTexture_GetRegistryMutex();
+std::vector<LatteTexture*> LatteTexture_GetAllTexturesSnapshot();
 
 float* LatteTexture_getEffectiveTextureScale(LatteConst::ShaderType shaderType, sint32 texUnit);
 
 LatteTextureView* LatteTexture_CreateTexture(Latte::E_DIM dim, MPTR physAddress, MPTR physMipAddress, Latte::E_GX2SURFFMT format, uint32 width, uint32 height, uint32 depth, uint32 pitch, uint32 mipLevels, uint32 swizzle, Latte::E_HWTILEMODE tileMode, bool isDepth);
 void LatteTexture_Delete(LatteTexture* texture);
+bool LatteTexture_IsOwnedSliceMipInfo(LatteTexture* texture, LatteTextureSliceMipInfo* sliceMipInfo);
 
 void LatteTextureLoader_writeReadbackTextureToMemory(LatteTextureDefinition* textureData, uint32 sliceIndex, uint32 mipIndex, uint8* linearPixelData);
 
