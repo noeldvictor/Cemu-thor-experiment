@@ -14,19 +14,32 @@ namespace GX2
 {
 	void GX2SetAttribBuffer(uint32 bufferIndex, uint32 sizeInBytes, uint32 stride, void* data)
 	{
-		GX2ReserveCmdSpace(9);
 		MPTR physicalAddress = memory_virtualToPhysical(memory_getVirtualOffsetFromPointer(data));
+		uint32 attribBufferRegs[7] =
+		{
+			physicalAddress,
+			sizeInBytes - 1,
+			(stride & 0xFFFF) << 11,
+			0,
+			0,
+			0,
+			0xC0000000
+		};
+		if (GX2SkipRedundantStateWriteRaw(GX2TrackedStateRegSpace::Resource, 0x8C0 + bufferIndex * 7, static_cast<const void*>(attribBufferRegs), 7))
+			return;
+
+		GX2ReserveCmdSpace(9);
 		// write PM4 command
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_RESOURCE, 8),
 			0x8C0 + bufferIndex * 7,
-			physicalAddress,
-			sizeInBytes - 1, // size
-			(stride & 0xFFFF) << 11, // stride
-			0, // ukn
-			0, // ukn
-			0, // ukn
-			0xC0000000); // ukn
+			attribBufferRegs[0],
+			attribBufferRegs[1], // size
+			attribBufferRegs[2], // stride
+			attribBufferRegs[3], // ukn
+			attribBufferRegs[4], // ukn
+			attribBufferRegs[5], // ukn
+			attribBufferRegs[6]); // ukn
 	}
 
 	void GX2DrawIndexedEx(GX2PrimitiveMode2 primitiveMode, uint32 count, GX2IndexType indexType, void* indexData, uint32 baseVertex, uint32 numInstances)

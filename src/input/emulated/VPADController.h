@@ -68,6 +68,8 @@ public:
 	bool is_screen_active() { return m_screen_active; }
 	bool is_screen_active_toggle() { return m_screen_active_toggle; }
 	void set_screen_toggle(bool toggle) {m_screen_active_toggle = toggle;}
+	bool is_right_stick_motion_enabled() const { return m_right_stick_motion; }
+	void set_right_stick_motion_enabled(bool enabled);
 
 	static std::string_view get_button_name(ButtonId id);
 

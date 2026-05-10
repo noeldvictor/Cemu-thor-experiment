@@ -200,6 +200,12 @@ object NativeInput {
     external fun getVPADScreenToggle(index: Int): Boolean
 
     @JvmStatic
+    external fun setVPADRightStickMotion(index: Int, enabled: Boolean)
+
+    @JvmStatic
+    external fun getVPADRightStickMotion(index: Int): Boolean
+
+    @JvmStatic
     external fun setControllerMapping(
         deviceDescriptor: String?,
         deviceName: String?,

@@ -1,9 +1,21 @@
 #pragma once
+#include <array>
+#include <cstring>
+#include <type_traits>
 #include "Cafe/HW/Latte/ISA/LatteReg.h"
 #include "Cafe/HW/Espresso/Const.h"
 
 namespace GX2
 {
+	enum class GX2TrackedStateRegSpace : uint32
+	{
+		Context = 0,
+		Config = 1,
+		Resource = 2,
+		Sampler = 3,
+		AluConst = 4,
+	};
+
 	struct GX2PerCoreCBState
 	{
 		uint32be* bufferPtr;
@@ -105,4 +117,60 @@ namespace GX2
 	void GX2Init_commandBufferPool(void* bufferBase, uint32 bufferSize);
 	void GX2Shutdown_commandBufferPool();
     void GX2CommandResetToDefaultState();
+
+	bool GX2SkipRedundantStateWriteRaw(GX2TrackedStateRegSpace regSpace, uint32 startRegister, const void* values, uint32 count);
+	void GX2InvalidateTrackedStateCache();
+
+	template <typename T>
+	inline uint32 GX2TrackedStateWord(const betype<T>& value)
+	{
+		if constexpr (std::is_base_of_v<Latte::LATTEREG, T>)
+		{
+			return value.value().getRawValue();
+		}
+		else if constexpr (std::is_floating_point_v<T>)
+		{
+			static_assert(sizeof(T) == sizeof(uint32));
+			T rawValue = value.value();
+			uint32 rawWord;
+			std::memcpy(&rawWord, &rawValue, sizeof(rawWord));
+			return rawWord;
+		}
+		else
+		{
+			return static_cast<uint32>(value.value());
+		}
+	}
+
+	template <typename T>
+		requires std::is_base_of_v<Latte::LATTEREG, T>
+	inline uint32 GX2TrackedStateWord(const T& value)
+	{
+		return value.getRawValue();
+	}
+
+	template <typename T>
+		requires std::is_floating_point_v<T>
+	inline uint32 GX2TrackedStateWord(const T& value)
+	{
+		static_assert(sizeof(T) == sizeof(uint32));
+		uint32 rawWord;
+		std::memcpy(&rawWord, &value, sizeof(rawWord));
+		return rawWord;
+	}
+
+	template <typename T>
+		requires (!std::is_base_of_v<Latte::LATTEREG, T>) && (!std::is_floating_point_v<T>)
+	inline uint32 GX2TrackedStateWord(const T& value)
+	{
+		return static_cast<uint32>(value);
+	}
+
+	template <typename... Targs>
+	inline bool GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace regSpace, uint32 startRegister, const Targs&... values)
+	{
+		static_assert(sizeof...(Targs) > 0);
+		const std::array<uint32, sizeof...(Targs)> words{ GX2TrackedStateWord(values)... };
+		return GX2SkipRedundantStateWriteRaw(regSpace, startRegister, words.data(), static_cast<uint32>(words.size()));
+	}
 }

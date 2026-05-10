@@ -450,6 +450,9 @@ namespace GX2
 			cemuLog_logOnce(LogType::APIErrors, "GX2Set*UniformReg must be called with a size that is a multiple of 4 (size: {:})", sizeInU32s);
 			sizeInU32s &= ~3;
 		}
+		if (GX2SkipRedundantStateWriteRaw(GX2TrackedStateRegSpace::AluConst, offsetRegBase + aluRegisterOffset, static_cast<const void*>(dataWords), sizeInU32s))
+			return;
+
 		GX2ReserveCmdSpace(2 + sizeInU32s);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_ALU_CONST, 1 + sizeInU32s), offsetRegBase + aluRegisterOffset);
 		gx2WriteGather_submitU32AsLEArray((uint32*)dataWords, sizeInU32s);

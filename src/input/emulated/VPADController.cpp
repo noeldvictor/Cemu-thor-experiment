@@ -185,6 +185,15 @@ void VPADController::update()
 	}
 }
 
+void VPADController::set_right_stick_motion_enabled(bool enabled)
+{
+	if (m_right_stick_motion == enabled)
+		return;
+
+	m_right_stick_motion = enabled;
+	m_right_stick_motion_last_rotation = {};
+}
+
 void VPADController::update_touch(VPADStatus_t& status)
 {
 	status.tpData.touch = kTpTouchOff;

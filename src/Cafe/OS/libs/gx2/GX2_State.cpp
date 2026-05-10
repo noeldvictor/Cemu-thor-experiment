@@ -23,6 +23,11 @@ namespace GX2
 
 	void GX2SetAlphaTestReg(GX2AlphaTestReg* reg)
 	{
+		bool alphaControlUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::SX_ALPHA_TEST_CONTROL - 0xA000, reg->regAlphaTestControl);
+		bool alphaRefUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::SX_ALPHA_REF - 0xA000, reg->regAlphaTestRef);
+		if (alphaControlUnchanged && alphaRefUnchanged)
+			return;
+
 		GX2ReserveCmdSpace(3 + 3);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -55,6 +60,9 @@ namespace GX2
 
 	void GX2SetColorControlReg(GX2ColorControlReg* reg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::CB_COLOR_CONTROL - 0xA000, reg->reg))
+			return;
+
 		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -96,6 +104,9 @@ namespace GX2
 
 	void GX2SetPolygonControlReg(GX2PolygonControlReg* reg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_SU_SC_MODE_CNTL - 0xA000, reg->reg))
+			return;
+
 		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -138,6 +149,12 @@ namespace GX2
 
 	void GX2SetPolygonOffsetReg(GX2PolygonOffsetReg* reg)
 	{
+		bool scaleOffsetUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_SU_POLY_OFFSET_FRONT_SCALE - 0xA000,
+			reg->regFrontScale, reg->regFrontOffset, reg->regBackScale, reg->regBackOffset);
+		bool clampUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_SU_POLY_OFFSET_CLAMP - 0xA000, reg->regClamp);
+		if (scaleOffsetUnchanged && clampUnchanged)
+			return;
+
 		GX2ReserveCmdSpace(6 + 3);
 
 		gx2WriteGather_submit(
@@ -162,8 +179,6 @@ namespace GX2
 
 	void GX2SetRasterizerClipControlEx(bool enableRasterizer, bool enableZClip, bool enableHalfZ)
 	{
-		GX2ReserveCmdSpace(3);
-
 		//if (enableHalfZ)
 		//{
 		//	// Smash has a bug where it enables half space clipping during streamout drawcalls and shadowing and then doesn't turn it off until the next GX2SetRasterizerClipControl call
@@ -185,6 +200,10 @@ namespace GX2
 		reg.set_DX_CLIP_SPACE_DEF(enableHalfZ);
 		reg.set_DX_LINEAR_ATTR_CLIP_ENA(true);
 
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_CL_CLIP_CNTL - 0xA000, reg))
+			return;
+
+		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
 			Latte::REGADDR::PA_CL_CLIP_CNTL - 0xA000,
 			reg);
@@ -213,6 +232,12 @@ namespace GX2
 
 	void GX2SetViewportReg(GX2ViewportReg* viewportReg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_CL_VPORT_XSCALE - 0xA000,
+			viewportReg->xScale, viewportReg->xOffset,
+			viewportReg->yScale, viewportReg->yOffset,
+			viewportReg->zScale, viewportReg->zOffset))
+			return;
+
 		GX2ReserveCmdSpace(2 + 6);
 
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 6),
@@ -247,6 +272,10 @@ namespace GX2
 
 	void GX2SetScissorReg(GX2ScissorReg* scissorReg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_SC_GENERIC_SCISSOR_TL - 0xA000,
+			scissorReg->scissorTL, scissorReg->scissorBR))
+			return;
+
 		GX2ReserveCmdSpace(4);
 
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 2),
@@ -272,13 +301,15 @@ namespace GX2
 	void GX2SetDepthOnlyControl(bool depthTestEnable, bool depthWriteEnable, LATTE_DB_DEPTH_CONTROL::E_ZFUNC depthFunction)
 	{
 		// disables any currently set stencil test
-		GX2ReserveCmdSpace(3);
-
 		Latte::LATTE_DB_DEPTH_CONTROL reg{};
 		reg.set_Z_ENABLE(depthTestEnable);
 		reg.set_Z_WRITE_ENABLE(depthWriteEnable);
 		reg.set_Z_FUNC(depthFunction);
 
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::DB_DEPTH_CONTROL - 0xA000, reg))
+			return;
+
+		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
 			Latte::REGADDR::DB_DEPTH_CONTROL - 0xA000,
 			reg);
@@ -293,8 +324,6 @@ namespace GX2
 		LATTE_DB_DEPTH_CONTROL::E_STENCILACTION backStencilZPass, LATTE_DB_DEPTH_CONTROL::E_STENCILACTION backStencilZFail, LATTE_DB_DEPTH_CONTROL::E_STENCILACTION backStencilFail
 	)
 	{
-		GX2ReserveCmdSpace(3);
-
 		Latte::LATTE_DB_DEPTH_CONTROL reg{};
 		reg.set_Z_ENABLE(depthTestEnable).set_Z_WRITE_ENABLE(depthWriteEnable).set_Z_FUNC(depthFunction);
 		reg.set_STENCIL_ENABLE(stencilTestEnable).set_BACK_STENCIL_ENABLE(backStencilTestEnable);
@@ -302,6 +331,10 @@ namespace GX2
 		reg.set_STENCIL_ZPASS_F(frontStencilZPass).set_STENCIL_ZFAIL_F(frontStencilZFail).set_STENCIL_FAIL_F(frontStencilFail);
 		reg.set_STENCIL_ZPASS_B(backStencilZPass).set_STENCIL_ZFAIL_B(backStencilZFail).set_STENCIL_FAIL_B(backStencilFail);
 
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::DB_DEPTH_CONTROL - 0xA000, reg))
+			return;
+
+		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
 			Latte::REGADDR::DB_DEPTH_CONTROL - 0xA000,
 			reg);
@@ -327,6 +360,9 @@ namespace GX2
 
 	void GX2SetDepthStencilControlReg(GX2DepthStencilControlReg* depthStencilControlReg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::DB_DEPTH_CONTROL - 0xA000, depthStencilControlReg->reg))
+			return;
+
 		GX2ReserveCmdSpace(3);
 
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -373,13 +409,17 @@ namespace GX2
 
 	void GX2SetStencilMask(uint8 compareMaskFront, uint8 writeMaskFront, uint8 refFront, uint8 compareMaskBack, uint8 writeMaskBack, uint8 refBack)
 	{
-		GX2ReserveCmdSpace(3 + 3);
-
 		LATTE_DB_STENCILREFMASK frontReg;
 		frontReg.set_STENCILREF_F(refFront).set_STENCILMASK_F(compareMaskFront).set_STENCILWRITEMASK_F(writeMaskFront);
 		LATTE_DB_STENCILREFMASK_BF backReg;
 		backReg.set_STENCILREF_B(refBack).set_STENCILMASK_B(compareMaskBack).set_STENCILWRITEMASK_B(writeMaskBack);
 
+		bool frontUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, REGADDR::DB_STENCILREFMASK - 0xA000, frontReg);
+		bool backUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, REGADDR::DB_STENCILREFMASK_BF - 0xA000, backReg);
+		if (frontUnchanged && backUnchanged)
+			return;
+
+		GX2ReserveCmdSpace(3 + 3);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
 							REGADDR::DB_STENCILREFMASK - 0xA000,
 							frontReg,
@@ -390,6 +430,11 @@ namespace GX2
 
 	void GX2SetStencilMaskReg(GX2StencilMaskReg* stencilMaskReg)
 	{
+		bool frontUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, REGADDR::DB_STENCILREFMASK - 0xA000, stencilMaskReg->stencilRefMaskFrontReg);
+		bool backUnchanged = GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, REGADDR::DB_STENCILREFMASK_BF - 0xA000, stencilMaskReg->stencilRefMaskBackReg);
+		if (frontUnchanged && backUnchanged)
+			return;
+
 		GX2ReserveCmdSpace(3 + 3);
 
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -402,9 +447,13 @@ namespace GX2
 
 	void GX2SetPrimitiveRestartIndex(uint32 restartIndex)
 	{
-		GX2ReserveCmdSpace(3);
 		Latte::LATTE_VGT_MULTI_PRIM_IB_RESET_INDX reg{};
 		reg.set_RESTART_INDEX(restartIndex);
+
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::VGT_MULTI_PRIM_IB_RESET_INDX - 0xA000, reg))
+			return;
+
+		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
 			Latte::REGADDR::VGT_MULTI_PRIM_IB_RESET_INDX - 0xA000,
 			reg);
@@ -428,6 +477,9 @@ namespace GX2
 
 	void GX2SetTargetChannelMasksReg(GX2TargetChannelMaskReg* reg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::CB_TARGET_MASK - 0xA000, reg->reg))
+			return;
+
 		GX2ReserveCmdSpace(3);
 
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -475,6 +527,9 @@ namespace GX2
 
 	void GX2SetBlendControlReg(GX2BlendControlReg* reg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, (Latte::REGADDR::CB_BLEND0_CONTROL + (uint32)reg->index) - 0xA000, reg->reg))
+			return;
+
 		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -500,6 +555,10 @@ namespace GX2
 
 	void GX2SetBlendConstantColorReg(GX2BlendConstantColorReg* reg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::CB_BLEND_RED - 0xA000,
+			reg->regRed, reg->regGreen, reg->regBlue, reg->regAlpha))
+			return;
+
 		GX2ReserveCmdSpace(6);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 4),
@@ -542,6 +601,9 @@ namespace GX2
 
 	void GX2SetPointSizeReg(GX2PointSizeReg* reg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_SU_POINT_SIZE - 0xA000, reg->reg))
+			return;
+
 		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -575,6 +637,9 @@ namespace GX2
 
 	void GX2SetPointLimitsReg(GX2PointLimitsReg* reg)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Context, Latte::REGADDR::PA_SU_POINT_MINMAX - 0xA000, reg->reg))
+			return;
+
 		GX2ReserveCmdSpace(3);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONTEXT_REG, 1 + 1),
@@ -636,6 +701,7 @@ namespace GX2
 
 	void GX2SetSpecialState(GX2_SPECIAL_STATE stateId, uint32 isEnabled)
 	{
+		GX2InvalidateTrackedStateCache();
 		if (stateId == GX2_SPECIAL_STATE::FAST_CLEAR)
 		{
 			_setSpecialState0(isEnabled != 0);

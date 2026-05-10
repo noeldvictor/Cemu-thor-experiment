@@ -1,6 +1,7 @@
 #include "Cafe/OS/common/OSCommon.h"
 #include "Cafe/HW/Latte/ISA/RegDefines.h"
 #include "GX2.h"
+#include "GX2_Command.h"
 #include "GX2_Texture.h"
 
 #include "Cafe/HW/Latte/Core/Latte.h"
@@ -151,8 +152,6 @@ namespace GX2
 
 	void _GX2SetTexture(GX2Texture* tex, Latte::REGADDR baseRegister, uint32 textureUnitIndex)
 	{
-		GX2ReserveCmdSpace(2 + 7);
-
 		MPTR imagePtr = tex->surface.imagePtr;
 		MPTR mipPtr = tex->surface.mipPtr;
 		if (mipPtr == MPTR_NULL)
@@ -173,12 +172,26 @@ namespace GX2
 				mipPtr ^= (swizzle & 0xFFFF);
 		}
 
+		uint32 textureRegs[7] =
+		{
+			GX2TrackedStateWord(tex->regTexWord0),
+			GX2TrackedStateWord(tex->regTexWord1),
+			memory_virtualToPhysical(imagePtr) >> 8,
+			memory_virtualToPhysical(mipPtr) >> 8,
+			GX2TrackedStateWord(tex->regTexWord4),
+			GX2TrackedStateWord(tex->regTexWord5),
+			GX2TrackedStateWord(tex->regTexWord6)
+		};
+		if (GX2SkipRedundantStateWriteRaw(GX2TrackedStateRegSpace::Resource, baseRegister + textureUnitIndex * 7 - mmSQ_TEX_RESOURCE_WORD0, static_cast<const void*>(textureRegs), 7))
+			return;
+
+		GX2ReserveCmdSpace(2 + 7);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_RESOURCE, 8),
 			baseRegister + textureUnitIndex * 7 - mmSQ_TEX_RESOURCE_WORD0,
 			tex->regTexWord0,
 			tex->regTexWord1,
-			memory_virtualToPhysical(imagePtr) >> 8,
-			memory_virtualToPhysical(mipPtr) >> 8,
+			textureRegs[2],
+			textureRegs[3],
 			tex->regTexWord4,
 			tex->regTexWord5,
 			tex->regTexWord6);
@@ -313,6 +326,9 @@ namespace GX2
 
 	void _GX2SetSampler(GX2Sampler* sampler, uint32 samplerIndex)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Sampler, samplerIndex * 3, sampler->word0, sampler->word1, sampler->word2))
+			return;
+
 		GX2ReserveCmdSpace(5);
 		gx2WriteGather_submit(pm4HeaderType3(IT_SET_SAMPLER, 1 + 3),
 			samplerIndex * 3,
@@ -341,6 +357,9 @@ namespace GX2
 
 	void GX2SetSamplerBorderColor(uint32 registerBaseOffset, uint32 samplerIndex, float red, float green, float blue, float alpha)
 	{
+		if (GX2SkipRedundantStateWrite(GX2TrackedStateRegSpace::Config, registerBaseOffset + samplerIndex * 4 - LATTE_REG_BASE_CONFIG, red, green, blue, alpha))
+			return;
+
 		GX2ReserveCmdSpace(6);
 		gx2WriteGather_submit(
 			pm4HeaderType3(IT_SET_CONFIG_REG, 1 + 4),

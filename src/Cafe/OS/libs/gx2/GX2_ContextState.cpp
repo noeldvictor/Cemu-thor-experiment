@@ -207,10 +207,12 @@ void _GX2Context_WriteCmdRestoreState(GX2ContextState_t* gx2ContextState, uint32
 	__cmdStateLoad(NULL, IT_LOAD_LOOP_CONST, gx2ContextState->hwContext.areaLoopConst, 0, loopConst_loadPktEntries);
 	__cmdStateLoad(NULL, IT_LOAD_RESOURCE, gx2ContextState->hwContext.areaResource, 0, resourceReg_loadPktEntries);
 	__cmdStateLoad(NULL, IT_LOAD_SAMPLER, gx2ContextState->hwContext.areaSampler, 0, samplerReg_loadPktEntries);
+	GX2::GX2InvalidateTrackedStateCache();
 }
 
 void GX2SetDefaultState()
 {
+	GX2::GX2InvalidateTrackedStateCache();
 	GX2::GX2ReserveCmdSpace(0x100);
 
 	Latte::LATTE_PA_CL_VTE_CNTL reg{};

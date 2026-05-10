@@ -1,5 +1,6 @@
 #include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/HW/Latte/Core/LatteDraw.h"
+#include <array>
 #include "Cafe/OS/common/OSCommon.h"
 #include "Cafe/HW/Latte/Core/LattePM4.h"
 #include "Cafe/OS/libs/coreinit/coreinit.h"
@@ -64,6 +65,95 @@ namespace GX2
 	GX2PerCoreCBState s_mainCoreLastCommandState;
 	bool s_cbBufferIsInternallyAllocated;
 
+	namespace
+	{
+		constexpr uint32 kTrackedStateCacheSlotCount = 4096;
+		constexpr uint32 kMaxTrackedStateWords = 64;
+
+		struct TrackedStateCacheEntry
+		{
+			uint32 key{};
+			uint32 value{};
+			uint32 generation{};
+		};
+
+		std::array<TrackedStateCacheEntry, kTrackedStateCacheSlotCount> s_trackedStateCache;
+		uint32 s_trackedStateCacheGeneration = 1;
+
+		uint32 makeTrackedStateKey(GX2TrackedStateRegSpace regSpace, uint32 reg)
+		{
+			return (static_cast<uint32>(regSpace) << 24) | (reg & 0x00FFFFFF);
+		}
+
+		uint32 getTrackedStateCacheSlot(uint32 key)
+		{
+			return ((key * 2654435761u) >> 20) & (kTrackedStateCacheSlotCount - 1);
+		}
+
+		bool canTrackStateWrites()
+		{
+			uint32 coreIndex = coreinit::OSGetCoreId();
+			if (coreIndex != sGX2MainCoreIndex)
+				return false;
+			const auto& coreCBState = s_perCoreCBState[coreIndex];
+			return coreCBState.currentWritePtr != nullptr && !coreCBState.isDisplayList;
+		}
+	}
+
+	void GX2InvalidateTrackedStateCache()
+	{
+		s_trackedStateCacheGeneration++;
+		if (s_trackedStateCacheGeneration == 0)
+		{
+			s_trackedStateCacheGeneration = 1;
+			for (auto& entry : s_trackedStateCache)
+				entry.generation = 0;
+		}
+	}
+
+	bool GX2SkipRedundantStateWriteRaw(GX2TrackedStateRegSpace regSpace, uint32 startRegister, const void* values, uint32 count)
+	{
+		if (!canTrackStateWrites())
+			return false;
+		if (count == 0)
+			return true;
+		if (count > kMaxTrackedStateWords)
+		{
+			GX2InvalidateTrackedStateCache();
+			return false;
+		}
+
+		bool allMatch = true;
+		const auto* bytes = static_cast<const uint8*>(values);
+		for (uint32 i = 0; i < count; i++)
+		{
+			uint32 value;
+			std::memcpy(&value, bytes + i * sizeof(uint32), sizeof(value));
+			uint32 key = makeTrackedStateKey(regSpace, startRegister + i);
+			const auto& entry = s_trackedStateCache[getTrackedStateCacheSlot(key)];
+			if (entry.generation != s_trackedStateCacheGeneration || entry.key != key || entry.value != value)
+			{
+				allMatch = false;
+				break;
+			}
+		}
+
+		if (allMatch)
+			return true;
+
+		for (uint32 i = 0; i < count; i++)
+		{
+			uint32 value;
+			std::memcpy(&value, bytes + i * sizeof(uint32), sizeof(value));
+			uint32 key = makeTrackedStateKey(regSpace, startRegister + i);
+			auto& entry = s_trackedStateCache[getTrackedStateCacheSlot(key)];
+			entry.key = key;
+			entry.value = value;
+			entry.generation = s_trackedStateCacheGeneration;
+		}
+		return false;
+	}
+
 	void GX2Command_StartNewCommandBuffer(uint32 numU32s);
 
 	// called from GX2Init. Allocates a 4MB memory chunk from which command buffers are suballocated from
@@ -95,6 +185,7 @@ namespace GX2
 			s_perCoreCBState[i].bufferSizeInU32s = 0;
 			s_perCoreCBState[i].currentWritePtr = nullptr;
 		}
+		GX2InvalidateTrackedStateCache();
 		// start first command buffer for main core
 		GX2Command_StartNewCommandBuffer(0x100);
 	}
@@ -109,6 +200,7 @@ namespace GX2
 		s_commandState->commandPoolBase = nullptr;
 		s_commandState->commandPoolSizeInU32s = 0;
 		s_commandState->gpuCommandReadPtr = nullptr;
+		GX2InvalidateTrackedStateCache();
 	}
 
 	// current position of where the GPU is reading from. Updated via a memory write command submitted to the GPU
@@ -428,6 +520,7 @@ namespace GX2
 			memory_virtualToPhysical(addr),
 			0, // high address bits
 			size / 4);
+		GX2InvalidateTrackedStateCache();
 	}
 
 	void GX2DirectCallDisplayList(void* addr, uint32 size)
@@ -445,6 +538,7 @@ namespace GX2
 			GX2Command_Flush(0x100, false);
 		}
 		GX2Command_SubmitCommandBuffer(static_cast<uint32be*>(addr), size / 4, nullptr, false);
+		GX2InvalidateTrackedStateCache();
 	}
 
 	void GX2CopyDisplayList(MEMPTR<uint32be*> addr, uint32 size)
@@ -456,6 +550,7 @@ namespace GX2
 		{
 			GX2ReserveCmdSpace(dwordCount);
 			gx2WriteGather_submitU32AsLEArray(displayListDWords, dwordCount);
+			GX2InvalidateTrackedStateCache();
 		}
 	}
 
@@ -533,6 +628,7 @@ namespace GX2
 		s_commandState->commandPoolSizeInU32s = 0;
 		s_commandState->gpuCommandReadPtr = nullptr;
 		s_cbBufferIsInternallyAllocated = false;
+		GX2InvalidateTrackedStateCache();
     }
 
 }

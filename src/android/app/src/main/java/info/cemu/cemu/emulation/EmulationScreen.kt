@@ -442,7 +442,10 @@ private fun EmulationSideMenuContent(
                     onEditInputOverlay = onEditInputOverlay,
                     onResetInputOverlay = onResetInputOverlay,
                 )
-                SideMenuSection.CONTROLLER_HELP -> ControllerHelpMenuContent()
+                SideMenuSection.CONTROLLER_HELP -> ControllerHelpMenuContent(
+                    sideMenuState = sideMenuState,
+                    updateState = updateState,
+                )
                 SideMenuSection.TOOLS -> ToolsMenuContent(onShowEmulatedUSBDevices)
             }
         }
@@ -678,11 +681,20 @@ private fun ToolsMenuContent(onShowEmulatedUSBDevices: () -> Unit) {
 }
 
 @Composable
-private fun ControllerHelpMenuContent() {
+private fun ControllerHelpMenuContent(
+    sideMenuState: SideMenuState,
+    updateState: (SideMenuState) -> Unit,
+) {
     var isR2Laser by rememberSaveable { mutableStateOf(true) }
+    var isDeviceGyro by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         isR2Laser = isStarFoxR2LaserMappingActive()
+        isDeviceGyro = isStarFoxDeviceGyroActive() && sideMenuState.isMotionEnabled
+    }
+
+    LaunchedEffect(sideMenuState.isMotionEnabled) {
+        isDeviceGyro = isStarFoxDeviceGyroActive() && sideMenuState.isMotionEnabled
     }
 
     Text(
@@ -706,12 +718,33 @@ private fun ControllerHelpMenuContent() {
         },
     )
 
+    CheckboxItem(
+        label = tr("Device gyro aiming"),
+        checked = isDeviceGyro,
+        onCheckedChange = { enabled ->
+            if (enabled) {
+                updateState(sideMenuState.copy(isMotionEnabled = true))
+            }
+            setStarFoxDeviceGyroActive(enabled)
+            if (!enabled) {
+                updateState(sideMenuState.copy(isMotionEnabled = false))
+            }
+            isDeviceGyro = enabled
+        },
+    )
+
     val laserInput = if (isR2Laser) tr("R2") else tr("A")
     val transformInput = if (isR2Laser) tr("A") else tr("R2")
+    val aimInput = if (isDeviceGyro) tr("Device gyro") else tr("Right stick")
+    val aimAction = if (isDeviceGyro) {
+        tr("Aim / cockpit gyro (handheld motion)")
+    } else {
+        tr("Aim / cockpit gyro (low sensitivity, inverted Y)")
+    }
 
     HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-    ControllerHelpRow(tr("Right stick"), tr("Aim / cockpit gyro (low sensitivity, inverted Y)"))
+    ControllerHelpRow(aimInput, aimAction)
     ControllerHelpRow(laserInput, tr("Laser / charge shot"))
     ControllerHelpRow(transformInput, tr("Transform / confirm"))
     ControllerHelpRow(tr("B"), tr("Smart bomb"))
@@ -725,7 +758,7 @@ private fun ControllerHelpMenuContent() {
     HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
     Text(
-        text = tr("This profile keeps aiming on the right stick and moves boost, brake, and maneuvers to buttons."),
+        text = tr("This profile keeps aiming separate from boost, brake, and maneuvers. Use device gyro for real motion, or right stick for handheld stick aiming."),
         modifier = Modifier.padding(8.dp),
         fontSize = 14.sp,
     )
@@ -770,6 +803,16 @@ private fun isStarFoxR2LaserMappingActive(): Boolean {
         NativeInput.VPADButton.ZR,
     )
     return mapping.isEmpty() || mapping.contains("Button R2")
+}
+
+private fun isStarFoxDeviceGyroActive(): Boolean =
+    !NativeInput.getVPADRightStickMotion(STAR_FOX_CONTROLLER_INDEX)
+
+private fun setStarFoxDeviceGyroActive(enabled: Boolean) {
+    if (enabled) {
+        NativeInput.setDeviceControllerIndex(STAR_FOX_CONTROLLER_INDEX)
+    }
+    NativeInput.setVPADRightStickMotion(STAR_FOX_CONTROLLER_INDEX, !enabled)
 }
 
 @Composable
