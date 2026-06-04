@@ -82,7 +82,7 @@ namespace
 			return { "unknown", 0 };
 
 		return {
-			module->moduleName2.empty() ? std::string("unnamed") : module->moduleName2,
+			module->moduleName.empty() ? std::string("unnamed") : module->moduleName,
 			address - module->regionMappingBase_text.GetMPTR(),
 		};
 	}
@@ -152,7 +152,7 @@ namespace
 
 			fmt::println(file,
 				"# module {}\tbase 0x{:08x}\tsize 0x{:x}\tcrc 0x{:08x}\ttrampoline_adjust 0x{:x}",
-				module->moduleName2,
+				module->moduleName,
 				module->regionMappingBase_text.GetMPTR(),
 				module->regionSize_text,
 				module->patchCRC,

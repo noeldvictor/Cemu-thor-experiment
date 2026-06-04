@@ -716,7 +716,7 @@ void debugger_addParserSymbols(class ExpressionParser& ep)
 		if (module)
 		{
 			module_tmp[i] = (double)module->regionMappingBase_text.GetMPTR();
-			ep.AddConstant(module->moduleName2, module_tmp[i]);
+			ep.AddConstant(module->moduleName, module_tmp[i]);
 		}
 	}
 
