@@ -1409,10 +1409,8 @@ void LatteTexture_MarkConnectedTexturesForReloadFromDynamicTextures(LatteTexture
 {
 	for (auto& it : texture->list_compatibleRelations)
 	{
-		if (texture == it->baseTexture)
-			it->subTexture->reloadFromDynamicTextures = true;
-		else
-			it->baseTexture->reloadFromDynamicTextures = true;
+		LatteTexture* connectedTexture = (texture == it->baseTexture) ? it->subTexture : it->baseTexture;
+		connectedTexture->reloadFromDynamicTextures = true;
 	}
 }
 
