@@ -3982,6 +3982,7 @@ void VulkanRenderer::bufferCache_init(const sint32 bufferSize)
 	m_importedMemBaseAddress = 0x10000000;
 	size_t hostAllocationSize = 0x40000000ull;
 	// todo - get size of allocation
+	/*
 	bool configUseHostMemory = false; // todo - replace this with a config option
 	m_useHostMemoryForCache = false;
 	if (m_featureControl.deviceExtensions.external_memory_host && configUseHostMemory)
@@ -3992,6 +3993,7 @@ void VulkanRenderer::bufferCache_init(const sint32 bufferSize)
 			cemuLog_log(LogType::Force, "Unable to import host memory to Vulkan buffer. Use default cache system instead");
 		}
 	}
+	*/
 	if(!m_useHostMemoryForCache)
 		memoryManager->CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 0, m_bufferCache, m_bufferCacheMemory);
 }
