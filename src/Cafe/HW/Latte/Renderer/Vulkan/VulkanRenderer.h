@@ -194,8 +194,6 @@ public:
 	VulkanRenderer();
 	virtual ~VulkanRenderer();
 
-	RendererAPI GetType() override { return RendererAPI::Vulkan; }
-
 	static VulkanRenderer* GetInstance();
 
 	void UnrecoverableError(const char* errMsg) const;
@@ -681,8 +679,8 @@ private:
 	size_t m_commandBufferIndex = 0; // current buffer being filled
 	size_t m_commandBufferSyncIndex = 0; // latest buffer that finished execution (updated on submit)
 	size_t m_commandBufferIDOfPrevFrame[2] = {};
-	std::array<size_t, kCommandBufferPoolSize> m_cmdBufferUniformRingbufIndices {}; // index in the uniform ringbuffer
-	std::array<VkFence, kCommandBufferPoolSize> m_cmd_buffer_fences;
+	std::array<size_t, kCommandBufferPoolSize> m_cmdBufferUniformRingbufIndices {}; // read index in the uniform ringbuffer after the command buffer finishes
+	std::array<VkFence, kCommandBufferPoolSize> m_cmdBufferFences;
 	std::array<VkCommandBuffer, kCommandBufferPoolSize> m_commandBuffers;
 	std::array<VkSemaphore, kCommandBufferPoolSize> m_commandBufferSemaphores;
 
