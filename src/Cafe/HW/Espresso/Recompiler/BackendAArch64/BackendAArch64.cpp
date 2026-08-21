@@ -696,20 +696,44 @@ bool AArch64GenContext_t::r_r_s32(IMLInstruction* imlInstruction)
 	{
 		sub_imm(regR, regA, immS32, TEMP_GPR1.WReg);
 	}
+	// AArch64 encodes a rotated run of ones directly into the bitwise instructions, so these
+	// usually need no temp register and no separate materialisation of the constant. This
+	// matters most for rlwinm: its general form is a rotate followed by AND with ppc_mask(MB,ME),
+	// and a PPC mask is by construction a contiguous (possibly wrapping) run of ones, which is
+	// exactly what the logical immediate encoding represents. andi./ori/xori benefit too.
+	//
+	// isBitMask() is xbyak's own predicate and is conservative - it accepts only a single run of
+	// ones and rejects all-zeros/all-ones - so anything it approves is encodable. Width matters,
+	// hence the explicit uint32 so it tests 32 bits rather than a zero-extended 64.
 	else if (imlInstruction->operation == PPCREC_IML_OP_AND)
 	{
-		mov(TEMP_GPR1.WReg, immS32);
-		and_(regR, regA, TEMP_GPR1.WReg);
+		if (isBitMask((uint32)immS32))
+			and_(regR, regA, (uint64)(uint32)immS32);
+		else
+		{
+			mov(TEMP_GPR1.WReg, immS32);
+			and_(regR, regA, TEMP_GPR1.WReg);
+		}
 	}
 	else if (imlInstruction->operation == PPCREC_IML_OP_OR)
 	{
-		mov(TEMP_GPR1.WReg, immS32);
-		orr(regR, regA, TEMP_GPR1.WReg);
+		if (isBitMask((uint32)immS32))
+			orr(regR, regA, (uint64)(uint32)immS32);
+		else
+		{
+			mov(TEMP_GPR1.WReg, immS32);
+			orr(regR, regA, TEMP_GPR1.WReg);
+		}
 	}
 	else if (imlInstruction->operation == PPCREC_IML_OP_XOR)
 	{
-		mov(TEMP_GPR1.WReg, immS32);
-		eor(regR, regA, TEMP_GPR1.WReg);
+		if (isBitMask((uint32)immS32))
+			eor(regR, regA, (uint64)(uint32)immS32);
+		else
+		{
+			mov(TEMP_GPR1.WReg, immS32);
+			eor(regR, regA, TEMP_GPR1.WReg);
+		}
 	}
 	else if (imlInstruction->operation == PPCREC_IML_OP_MULTIPLY_SIGNED)
 	{
