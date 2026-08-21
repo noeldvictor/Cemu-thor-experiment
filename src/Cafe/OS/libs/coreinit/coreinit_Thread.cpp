@@ -1307,7 +1307,25 @@ namespace coreinit
 			{
 				__OSCheckSystemEvents();
 				if(g_isMulticoreMode == false)
+				{
 					coreIndex = (coreIndex + 1) % 3;
+				}
+				else
+				{
+					// Don't spin. The other cores block on this semaphore when idle, but the
+					// main core also has to service system events, so it used to loop with no
+					// rate limiting at all - burning a full core whenever no guest thread was
+					// runnable. That showed up as OSSched[core=1] using ~4x the CPU of the
+					// other guest cores and dominating every profile.
+					//
+					// A thread becoming runnable increments this semaphore and wakes us
+					// immediately, so this only bounds how often system events are polled
+					// while genuinely idle. The shortest consumer is the AX update at a 1.7ms
+					// minimum interval, so 100us leaves well over an order of magnitude of
+					// headroom. On a handheld this also matters thermally: a core spinning at
+					// 100% costs sustained clocks even when the framerate looks fine.
+					g_coreRunQueueThreadCount[coreIndex].waitUntilNonZeroWithTimeout(std::chrono::microseconds(100));
+				}
 			}
 			else
 			{
