@@ -209,6 +209,33 @@ read a counter that is already coherent between them.
 Related: `_udiv128` is not an instruction on AArch64 - `precompiled.h` implements it with
 `unsigned __int128`, which lowers to a `__udivti3` libcall.
 
+### Open: psq_st quantisation disagrees with the manual on NaN, differently per backend
+
+From the Gekko manual (paired single load/store, quantisation algorithm): the converted value
+for **+Inf or NaN is the positive-overflow saturation value** for the target type - 127, 255,
+32767 or 65535. Rounding is toward zero, and type 0 (F32) passes through with no conversion
+at all, denormals included.
+
+`PPCRecompilerImlGen_EmitPSQStoreCase` implements this as `FPR_FLOAT_TO_INT` followed by
+`ClampInteger`, which is correct for finite overflow but not for NaN, and the two backends
+diverge:
+
+| input | Espresso (per manual) | x64 `cvttsd2si` then clamp | AArch64 `fcvtzs` then clamp |
+|---|---|---|---|
+| NaN, S16 | `32767` | `-32768` | `0` |
+
+So a NaN reaching a quantised paired-single store produces three different answers. Neither
+backend matches the hardware and they do not match each other.
+
+**Unmeasured and probably rare** - NaN in paired-single geometry data is not normal - so this
+is recorded rather than fixed. A fix costs instructions on a hot path (psq_l/psq_st are ~1.7%
+of the executed opcode mix), so it wants a game that actually hits it first. If it is ever
+fixed, fix both backends together and add a cpu-test, or the divergence just moves.
+
+Note the F32 case is the common one and is already optimal in structure: the GQR value is
+usually known at compile time, so the recompiler emits a specialised case rather than the
+multi-way branch.
+
 ### Open: half of the guest main thread is in the vdso clock read
 
 Profiling Star Fox Zero on 2026-08-20 put **23% of all emulator CPU** (and **48% of
