@@ -179,6 +179,36 @@ so it does not get re-proposed:
 
 Revisit only if a profile shows guest code quality dominating with large hot blocks.
 
+## Measured Baseline (2026-08-21)
+
+A/B of `3f36e05a` (before the optimisation work) against `af59bf4e`, three runs each, same
+device, same game, same phase:
+
+| | baseline | after | |
+|---|---|---|---|
+| CPU over 20s of loading | 3583 / 3619 / 3641 ticks | 2526 / 2549 / 2489 | **-30.2%** |
+| startup, Init Cemu -> Run title | 3.759 / 3.741 / 3.761 s | 0.855 s x3 | **4.4x faster** |
+
+The ranges do not overlap - the baseline's best run is above the optimised build's worst - and
+variance is under 1.5% either side, so this is signal.
+
+**Measure on the loading phase, not gameplay.** Every scene reachable without playing is vsync
+capped at 60fps with the GPU around 15% busy and 2 of 8 CPU cores in use, so nothing is
+saturated and per-instruction work is invisible. Loading is genuinely CPU bound - roughly half
+the samples land in recompiled guest code - which makes it the only workload here that can
+detect a codegen change.
+
+**Two traps when reproducing this:**
+- Builds from before 2026-08-21 have no `<profileable android:shell="true"/>`, so **simpleperf
+  cannot attach to them at all**. Use `/proc/<pid>/stat` (fields 14+15, utime+stime) for any
+  A/B involving an older build; it works everywhere.
+- Whole-process CPU during *gameplay* is useless as a metric - it is dominated by threads
+  spinning, so it barely moves no matter what you fix. That is why a real 3-instructions-to-2
+  recompiler win once measured as 7922 vs 7897 ticks, i.e. nothing.
+
+Reproduce with a script that force-stops, launches, waits ~8s, samples `/proc/<pid>/stat`,
+waits 20s, samples again, and also reads the Init/Run title timestamps out of `log.txt`.
+
 ## Profiling On Device
 
 The release build carries `<profileable android:shell="true"/>`, so simpleperf works
