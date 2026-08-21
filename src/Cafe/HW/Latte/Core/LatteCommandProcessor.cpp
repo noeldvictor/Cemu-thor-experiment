@@ -152,6 +152,14 @@ uint32 LatteCP_readU32Deprc()
 		g_renderer->NotifyLatteCommandProcessorIdle(); // let the renderer know in case it wants to flush any commands
 		performanceMonitor.gpuTime_idleTime.beginMeasuring();
 		// no command data available, spin in a busy loop for a bit then check again
+		//
+		// The 80 iterations were tuned on x86, where PAUSE is on the order of 140 cycles - about
+		// 2.8us of backoff. On AArch64 _mm_pause() is `isb sy`, which is far cheaper, so this
+		// spins for roughly a quarter of that and falls through to the sched_yield below more
+		// often. Making the backoff time-based to match x86's intent was tried and measured
+		// worse on the Thor: LatteCP_readU32Deprc went 5.13% -> 7.12% of total CPU and overall
+		// samples rose, because the extra spinning costs more than the syscalls it avoids.
+		// The shorter ARM backoff is the better trade - leave the count alone.
 		for (sint32 busy = 0; busy < 80; busy++)
 		{
 			_mm_pause();

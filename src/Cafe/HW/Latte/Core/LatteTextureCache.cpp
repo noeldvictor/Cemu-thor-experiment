@@ -52,6 +52,53 @@ T LatteTC_ReadUnaligned(const void* ptr)
 	return value;
 }
 
+
+// Samples one uint32 every strideBytes, sampleCount times, folding each with an add and a
+// rotate.
+//
+// The straightforward form carries hashVal through that add+rotate on every iteration, so
+// the scan serialises on a ~2 cycle dependency chain no matter how fast the loads retire.
+// Four independent accumulators give the core four chains to interleave.
+//
+// Profiling Star Fox Zero on the Thor traces LatteCP_processCommandBuffer ->
+// draw_beginSequence -> LatteTexture_updateTexturesForStage -> LatteTC_HasTextureChanged ->
+// here; this is where essentially all of HasTextureChanged's time goes, and it measured 0.88%
+// of total emulator CPU in self time - the largest single non-kernel symbol on the GPU thread
+// after the command processor read itself. These loops were scalar on every platform, not
+// just ARM: only the huge-texture branch ever had a SIMD path.
+//
+// Changing how the samples are folded changes the hash value, which is fine: texDataHash2 is
+// only ever compared against another hash computed for the same texture in the same process
+// and is never serialised. The AVX2, NEON and scalar paths already disagree with each other.
+static uint32 LatteTC_StridedRotateHash(const uint8* data, uint32 sampleCount, uint32 strideBytes)
+{
+	uint32 h0 = 0, h1 = 0, h2 = 0, h3 = 0;
+	const uint32 stride2 = strideBytes * 2;
+	const uint32 stride3 = strideBytes * 3;
+	const uint32 stride4 = strideBytes * 4;
+	uint32 quadCount = sampleCount / 4;
+	while (quadCount--)
+	{
+		h0 += LatteTC_ReadUnaligned<uint32>(data);
+		h1 += LatteTC_ReadUnaligned<uint32>(data + strideBytes);
+		h2 += LatteTC_ReadUnaligned<uint32>(data + stride2);
+		h3 += LatteTC_ReadUnaligned<uint32>(data + stride3);
+		h0 = (h0 << 3) | (h0 >> 29);
+		h1 = (h1 << 3) | (h1 >> 29);
+		h2 = (h2 << 3) | (h2 >> 29);
+		h3 = (h3 << 3) | (h3 >> 29);
+		data += stride4;
+	}
+	uint32 remaining = sampleCount & 3;
+	while (remaining--)
+	{
+		h0 += LatteTC_ReadUnaligned<uint32>(data);
+		h0 = (h0 << 3) | (h0 >> 29);
+		data += strideBytes;
+	}
+	return h0 + h1 + h2 + h3;
+}
+
 // sample few uint64s uniformly over memory range
 uint32 _quickStochasticHash(void* texData, uint32 memRange)
 {
@@ -114,13 +161,7 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 		// check only 32 samples of the texture
 		if (memRange < 256)
 		{
-			memRange /= sizeof(uint32);
-			while (memRange--)
-			{
-				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
-				hashVal = (hashVal << 3) | (hashVal >> 29);
-				texDataU8 += sizeof(uint32);
-			}
+			hashVal = LatteTC_StridedRotateHash(texDataU8, memRange / sizeof(uint32), sizeof(uint32));
 		}
 		else
 		{
@@ -136,23 +177,11 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 		bool isCompressedFormat = hostTexture->IsCompressedFormat();
 		if( isCompressedFormat == false || memRange < 0x200 )
 		{
-			memRange /= (4*sizeof(uint32));
-			while( memRange-- )
-			{
-				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
-				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU8 += 4 * sizeof(uint32);
-			}
+			hashVal = LatteTC_StridedRotateHash(texDataU8, memRange / (4 * sizeof(uint32)), 4 * sizeof(uint32));
 		}
 		else
 		{
-			memRange /= (32*sizeof(uint32));
-			while( memRange-- )
-			{
-				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
-				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU8 += 32 * sizeof(uint32);
-			}
+			hashVal = LatteTC_StridedRotateHash(texDataU8, memRange / (32 * sizeof(uint32)), 32 * sizeof(uint32));
 		}
 	}
 	else if( pixelCount <= (1200*1200) )
@@ -161,23 +190,11 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 		bool isCompressedFormat = hostTexture->IsCompressedFormat();
 		if( isCompressedFormat == false )
 		{
-			memRange /= (12*sizeof(uint32));
-			while( memRange-- )
-			{
-				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
-				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU8 += 12 * sizeof(uint32);
-			}
+			hashVal = LatteTC_StridedRotateHash(texDataU8, memRange / (12 * sizeof(uint32)), 12 * sizeof(uint32));
 		}
 		else
 		{
-			memRange /= (96*sizeof(uint32));
-			while( memRange-- )
-			{
-				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
-				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU8 += 96 * sizeof(uint32);
-			}
+			hashVal = LatteTC_StridedRotateHash(texDataU8, memRange / (96 * sizeof(uint32)), 96 * sizeof(uint32));
 		}
 	}
 	else
@@ -246,13 +263,7 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 		}
 		else
 		{
-			memRange /= (512*sizeof(uint32));
-			while( memRange-- )
-			{
-				hashVal += LatteTC_ReadUnaligned<uint32>(texDataU8);
-				hashVal = (hashVal<<3)|(hashVal>>29);
-				texDataU8 += 512 * sizeof(uint32);
-			}
+			hashVal = LatteTC_StridedRotateHash(texDataU8, memRange / (512 * sizeof(uint32)), 512 * sizeof(uint32));
 		}
 	}
 

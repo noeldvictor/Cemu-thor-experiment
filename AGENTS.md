@@ -110,6 +110,28 @@ The PDFs are deliberately **gitignored** (`docs/reference/**/*.pdf`) because the
 
 Use the right manual for the question. The Arm ARM is the architecture: what an instruction is *defined* to do, including exact NaN and saturation behavior — reach for it on correctness questions. The per-core software optimization guides are the microarchitecture: latency, throughput, and which issue pipe — reach for those on performance questions. Neither answers the other's question. `Read` cannot render these PDFs; use pypdf.
 
+## Use Wireless ADB, Not USB
+
+The Thor's USB connection drops repeatedly - it went `offline`/`unauthorized` several times
+during one session and silently truncated a screenshot mid-transfer, which looks exactly like
+a rendering bug until you check the file. Use TCP:
+
+```sh
+adb tcpip 5555
+adb connect 192.168.1.3:5555         # device IP: adb shell "ip -f inet addr show wlan0"
+export ANDROID_SERIAL=192.168.1.3:5555
+```
+
+Set `ANDROID_SERIAL` in every shell that talks to the device, since shell state does not
+persist between tool calls and both transports may be listed at once.
+
+Two Git Bash gotchas when driving adb from this repo:
+- Device paths get mangled into Windows paths. `adb pull /sdcard/shot.png` becomes
+  `C:/Program Files/Git/sdcard/shot.png`. Prefix with `MSYS_NO_PATHCONV=1`.
+- Prefer `adb shell screencap -p /sdcard/shot.png` then `adb pull` over
+  `adb exec-out screencap -p > file.png`. The streaming form truncates on a flaky link and
+  produces a corrupt PNG rather than an error.
+
 ## Device Test Etiquette
 
 The AYN Thor is a real device someone else is also using. When running tests, launch the
