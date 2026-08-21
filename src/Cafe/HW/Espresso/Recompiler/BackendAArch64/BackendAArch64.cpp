@@ -172,7 +172,7 @@ struct AArch64GenContext_t : CodeGenerator
 	bool r_r_r(IMLInstruction* imlInstruction);
 	bool r_r_r_carry(IMLInstruction* imlInstruction);
 	void compare(IMLInstruction* imlInstruction);
-	void compare_s32(IMLInstruction* imlInstruction);
+	void compare_s32(IMLInstruction* imlInstruction, bool reuseFlags);
 	WReg emitGuestAddress(WReg memReg, sint32 memOffset, bool indexed, WReg indexReg);
 	bool load(IMLInstruction* imlInstruction, bool indexed);
 	bool store(IMLInstruction* imlInstruction, bool indexed);
@@ -945,13 +945,16 @@ void AArch64GenContext_t::compare(IMLInstruction* imlInstruction)
 	cset(regR, cond);
 }
 
-void AArch64GenContext_t::compare_s32(IMLInstruction* imlInstruction)
+void AArch64GenContext_t::compare_s32(IMLInstruction* imlInstruction, bool reuseFlags)
 {
 	WReg regR = gpReg<WReg>(imlInstruction->op_compare.regR);
 	WReg regA = gpReg<WReg>(imlInstruction->op_compare.regA);
 	sint32 imm = imlInstruction->op_compare_s32.immS32;
 	auto cond = ImlCondToArm64Cond(imlInstruction->op_compare.cond);
-	cmp_imm(regA, imm, TEMP_GPR1.WReg);
+	// The CMP can be skipped when the preceding instruction already compared the same register
+	// against the same immediate - NZCV still holds the answer and CSET does not write flags.
+	if (!reuseFlags)
+		cmp_imm(regA, imm, TEMP_GPR1.WReg);
 	cset(regR, cond);
 }
 
@@ -1683,7 +1686,25 @@ bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, 
 			}
 			else if (imlInstruction->type == PPCREC_IML_TYPE_COMPARE_S32)
 			{
-				aarch64GenContext.compare_s32(imlInstruction);
+				// PPCImlGen_UpdateCR0 emits three compares of the same register against the same
+				// immediate, one each for the LT, GT and EQ bits, and it runs for every PPC
+				// instruction with the Rc bit set. On AArch64 a single CMP sets NZCV for all
+				// three, so only the first needs it. Consecutive IML instructions mean nothing
+				// was emitted in between, and CSET does not write the flags.
+				bool reuseFlags = false;
+				if (i > 0)
+				{
+					IMLInstruction* prevInstruction = segIt->imlList.data() + (i - 1);
+					if (prevInstruction->type == PPCREC_IML_TYPE_COMPARE_S32 &&
+						prevInstruction->op_compare_s32.regA.GetRegID() == imlInstruction->op_compare_s32.regA.GetRegID() &&
+						prevInstruction->op_compare_s32.immS32 == imlInstruction->op_compare_s32.immS32 &&
+						// the previous CSET must not have overwritten the value we are comparing
+						prevInstruction->op_compare_s32.regR.GetRegID() != imlInstruction->op_compare_s32.regA.GetRegID())
+					{
+						reuseFlags = true;
+					}
+				}
+				aarch64GenContext.compare_s32(imlInstruction, reuseFlags);
 			}
 			else if (imlInstruction->type == PPCREC_IML_TYPE_CONDITIONAL_JUMP)
 			{

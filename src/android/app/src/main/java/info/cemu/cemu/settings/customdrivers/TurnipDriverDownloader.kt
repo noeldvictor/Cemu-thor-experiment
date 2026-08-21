@@ -67,8 +67,13 @@ class TurnipDriverDownloader(
     }
 
     private fun isTurnipZip(fileName: String): Boolean {
-        return fileName.endsWith(".zip", ignoreCase = true) &&
-                fileName.contains("turnip", ignoreCase = true)
+        // Also accept a bare .adpkg. That is the AdrenoTools package extension and is itself a
+        // zip archive (meta.json plus the driver .so), so installDriverFromZip handles it
+        // unchanged. MrPurple666 happens to publish assets as "...adpkg.zip" which the .zip
+        // check already matched, but other repos do publish bare .adpkg.
+        val isPackage = fileName.endsWith(".zip", ignoreCase = true) ||
+                fileName.endsWith(".adpkg", ignoreCase = true)
+        return isPackage && fileName.contains("turnip", ignoreCase = true)
     }
 
     private fun turnipAssetScore(fileName: String): Int {
@@ -110,6 +115,11 @@ class TurnipDriverDownloader(
                 name = "Banners-Turnip",
                 repo = "The412Banner/Banners-Turnip",
                 sortOrder = 2,
+            ),
+            DriverSource(
+                name = "MrPurple",
+                repo = "MrPurple666/purple-turnip",
+                sortOrder = 3,
             ),
         )
 
