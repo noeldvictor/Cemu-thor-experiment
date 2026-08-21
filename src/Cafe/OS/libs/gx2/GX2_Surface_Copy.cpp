@@ -20,6 +20,24 @@ void gx2SurfaceCopySoftware_specialized(
 	uint32 dstPipeSwizzle = (dstSwizzle >> 8) & 1;
 	uint32 dstBankSwizzle = ((dstSwizzle >> 9) & 3);
 
+	// For macro-tiled surfaces the per-pixel address depends on a pile of values that are
+	// constant for the whole copy - bpp, pitch, height, tile mode, slice, the swizzles - and the
+	// general ComputeSurfaceAddrFromCoordMacroTiled() recomputes all of it on every single pixel.
+	// LatteTextureLoader already avoids that by precomputing a CachedSurfaceAddrInfo once and
+	// using the cached variant per pixel; the surface copy path never did.
+	//
+	// This showed up profiling Star Fox Zero's loading phase on the Thor, where
+	// ComputeSurfaceAddrFromCoordMacroTiled was 2.09% of all emulator CPU. Upstream has the same
+	// per-pixel call, so this is not an Android-specific gap.
+	const bool srcIsMacroTiled = srcHwTileMode > 3;
+	const bool dstIsMacroTiled = dstHwTileMode > 3;
+	LatteAddrLib::CachedSurfaceAddrInfo srcAddrInfo{};
+	LatteAddrLib::CachedSurfaceAddrInfo dstAddrInfo{};
+	if (srcIsMacroTiled)
+		LatteAddrLib::SetupCachedSurfaceAddrInfo(&srcAddrInfo, srcSlice, 0, copyBpp, srcPitch, surfSrcHeight, srcDepth, 1 * 1, (Latte::E_HWTILEMODE)srcHwTileMode, false, srcPipeSwizzle, srcBankSwizzle);
+	if (dstIsMacroTiled)
+		LatteAddrLib::SetupCachedSurfaceAddrInfo(&dstAddrInfo, dstSlice, 0, copyBpp, dstPitch, surfDstHeight, dstDepth, 1 * 1, (Latte::E_HWTILEMODE)dstHwTileMode, false, dstPipeSwizzle, dstBankSwizzle);
+
 	for (uint32 y = 0; y < copyHeight; y++)
 	{
 		for (uint32 x = 0; x < copyWidth; x++)
@@ -31,7 +49,7 @@ void gx2SurfaceCopySoftware_specialized(
 			else if (srcHwTileMode == 2 || srcHwTileMode == 3)
 				srcOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMicroTiled(x, y, srcSlice, copyBpp, srcPitch, surfSrcHeight, (Latte::E_HWTILEMODE)srcHwTileMode, false);
 			else
-				srcOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiled(x, y, srcSlice, 0, copyBpp, srcPitch, surfSrcHeight, 1 * 1, (Latte::E_HWTILEMODE)srcHwTileMode, false, srcPipeSwizzle, srcBankSwizzle);
+				srcOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiledCached(x, y, &srcAddrInfo);
 			uint8* inputBlockData = inputData + srcOffset;
 			// calculate address of output block
 			uint32 dstOffset = 0;
@@ -40,7 +58,7 @@ void gx2SurfaceCopySoftware_specialized(
 			else if (dstHwTileMode == 2 || dstHwTileMode == 3)
 				dstOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMicroTiled(x, y, dstSlice, copyBpp, dstPitch, surfDstHeight, (Latte::E_HWTILEMODE)dstHwTileMode, false);
 			else
-				dstOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiled(x, y, dstSlice, 0, copyBpp, dstPitch, surfDstHeight, 1 * 1, (Latte::E_HWTILEMODE)dstHwTileMode, false, dstPipeSwizzle, dstBankSwizzle);
+				dstOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiledCached(x, y, &dstAddrInfo);
 			uint8* outputBlockData = outputData + dstOffset;
 
 			if constexpr (copyBpp == 8)
@@ -89,6 +107,13 @@ void gx2SurfaceCopySoftware_fastPath_tm4Copy(uint8* inputData, sint32 surfSrcHei
 
 	uint32 texelBytes = copyBpp / 8;
 
+	// same hoist as gx2SurfaceCopySoftware_specialized: this path is always macro-tiled
+	// (TM_2D_TILED_THIN1), so the whole per-tile address computation can be set up once
+	LatteAddrLib::CachedSurfaceAddrInfo srcAddrInfo{};
+	LatteAddrLib::CachedSurfaceAddrInfo dstAddrInfo{};
+	LatteAddrLib::SetupCachedSurfaceAddrInfo(&srcAddrInfo, srcSlice, 0, copyBpp, srcPitch, surfSrcHeight, srcDepth, 1 * 1, Latte::E_HWTILEMODE::TM_2D_TILED_THIN1, false, srcPipeSwizzle, srcBankSwizzle);
+	LatteAddrLib::SetupCachedSurfaceAddrInfo(&dstAddrInfo, dstSlice, 0, copyBpp, dstPitch, surfDstHeight, dstDepth, 1 * 1, Latte::E_HWTILEMODE::TM_2D_TILED_THIN1, false, dstPipeSwizzle, dstBankSwizzle);
+
 	if (srcSlice == dstSlice && srcSwizzle == dstSwizzle && surfSrcHeight == surfDstHeight && srcPitch == dstPitch)
 	{
 		// shared tile offsets
@@ -97,7 +122,7 @@ void gx2SurfaceCopySoftware_fastPath_tm4Copy(uint8* inputData, sint32 surfSrcHei
 			for (uint32 x = 0; x < copyWidth; x += 8)
 			{
 				// copy 8x8 micro tile
-				uint32 offset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiled(x, y, srcSlice, 0, copyBpp, srcPitch, surfSrcHeight, 1 * 1, Latte::E_HWTILEMODE::TM_2D_TILED_THIN1, false, srcPipeSwizzle, srcBankSwizzle);
+				uint32 offset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiledCached(x, y, &srcAddrInfo);
 				uint8* inputBlockData = inputData + offset;
 				uint8* outputBlockData = outputData + offset;
 				memcpy(outputBlockData, inputBlockData, texelBytes * (8 * 8));
@@ -112,9 +137,9 @@ void gx2SurfaceCopySoftware_fastPath_tm4Copy(uint8* inputData, sint32 surfSrcHei
 			for (uint32 x = 0; x < copyWidth; x += 8)
 			{
 				// copy 8x8 micro tile
-				uint32 srcOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiled(x, y, srcSlice, 0, copyBpp, srcPitch, surfSrcHeight, 1 * 1, Latte::E_HWTILEMODE::TM_2D_TILED_THIN1, false, srcPipeSwizzle, srcBankSwizzle);
+				uint32 srcOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiledCached(x, y, &srcAddrInfo);
 				uint8* inputBlockData = inputData + srcOffset;
-				uint32 dstOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiled(x, y, dstSlice, 0, copyBpp, dstPitch, surfDstHeight, 1 * 1, Latte::E_HWTILEMODE::TM_2D_TILED_THIN1, false, dstPipeSwizzle, dstBankSwizzle);
+				uint32 dstOffset = LatteAddrLib::ComputeSurfaceAddrFromCoordMacroTiledCached(x, y, &dstAddrInfo);
 				uint8* outputBlockData = outputData + dstOffset;
 				memcpy(outputBlockData, inputBlockData, texelBytes * (8 * 8));
 			}
