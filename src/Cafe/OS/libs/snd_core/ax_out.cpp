@@ -482,6 +482,26 @@ namespace snd_core
 		constexpr static auto kWaitDurationFast = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(2900));
 		constexpr static auto kWaitDurationMinimum = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(1700));
 
+		// s_ax_interval_timer increases by the wait period
+		// it can lag behind by multiple periods (up to kTimeout) if there is minor stutter in the CPU thread
+		// s_last_check is always set to the timestamp at the time of firing
+		// it's used to enforce the minimum wait delay (we want to avoid calling AX update in quick succession because other threads may need to do work first)
+
+		static auto s_ax_interval_timer = now_cached() - kWaitDuration;
+		static auto s_last_check = now_cached();
+
+		const auto now = now_cached();
+
+		// The minimum wait check does not depend on how many blocks are buffered, so do it
+		// before touching g_audioMutex. This function is called from the main core's idle
+		// fiber (coreinit::__OSThreadCoreIdle), which spins without any rate limiting of its
+		// own, so taking a lock and asking the audio devices for their buffer state on every
+		// iteration was pure overhead - it happened millions of times per second to answer a
+		// question that can only change every 1.7ms. Profiling put ~19% of all emulator CPU
+		// in this function; almost all of it was here, ahead of the early-out.
+		if ((now - s_last_check) < kWaitDurationMinimum)
+			return;
+
 		// if we haven't buffered any blocks, we will wait less time than usual
 		bool additional_blocks_required = false;
 		{
@@ -491,24 +511,11 @@ namespace snd_core
 		}
 
 		const auto wait_duration = additional_blocks_required ? kWaitDurationFast : kWaitDuration;
-
-		// s_ax_interval_timer increases by the wait period
-		// it can lag behind by multiple periods (up to kTimeout) if there is minor stutter in the CPU thread
-		// s_last_check is always set to the timestamp at the time of firing
-		// it's used to enforce the minimum wait delay (we want to avoid calling AX update in quick succession because other threads may need to do work first) 
-
-		static auto s_ax_interval_timer = now_cached() - kWaitDuration;
-		static auto s_last_check = now_cached();
-
-		const auto now = now_cached();
 		const auto diff = (now - s_ax_interval_timer);
 
 		if (diff < wait_duration)
 			return;
 
-		// handle minimum wait time (1.7MS)
-		if ((now - s_last_check) < kWaitDurationMinimum)
-			return;
 		s_last_check = now;
 
 		// if we're too far behind, skip forward
