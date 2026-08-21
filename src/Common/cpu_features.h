@@ -41,6 +41,7 @@ public:
 		bool asimddp{ false };  // FEAT_DotProd - UDOT/SDOT
 		bool i8mm{ false };     // FEAT_I8MM - integer matrix multiply
 		bool sha3{ false };     // FEAT_SHA3 - also provides EOR3/BCAX/RAX1/XAR
+		bool aes{ false };      // FEAT_AES - AESE/AESD/AESMC/AESIMC
 		bool sve{ false };      // FEAT_SVE - absent on Snapdragon 8 Gen 2
 	}arm;
 private:

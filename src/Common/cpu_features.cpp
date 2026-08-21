@@ -105,6 +105,9 @@ std::string getCpuBrandNameAndroid()
 #ifndef HWCAP_ASIMDHP
 #define HWCAP_ASIMDHP (1u << 10)
 #endif
+#ifndef HWCAP_AES
+#define HWCAP_AES (1u << 3)
+#endif
 #ifndef HWCAP_SHA3
 #define HWCAP_SHA3 (1u << 17)
 #endif
@@ -149,6 +152,7 @@ CPUFeaturesImpl::CPUFeaturesImpl()
 		arm.asimdhp = (hwcap & HWCAP_ASIMDHP) != 0;
 		arm.asimddp = (hwcap & HWCAP_ASIMDDP) != 0;
 		arm.sha3 = (hwcap & HWCAP_SHA3) != 0;
+		arm.aes = (hwcap & HWCAP_AES) != 0;
 		arm.sve = (hwcap & HWCAP_SVE) != 0;
 		arm.i8mm = (hwcap2 & HWCAP2_I8MM) != 0;
 	}
@@ -158,6 +162,7 @@ CPUFeaturesImpl::CPUFeaturesImpl()
 	arm.asimddp = sysctlFeatureEnabled("hw.optional.arm.FEAT_DotProd");
 	arm.i8mm = sysctlFeatureEnabled("hw.optional.arm.FEAT_I8MM");
 	arm.sha3 = sysctlFeatureEnabled("hw.optional.armv8_2_sha3");
+	arm.aes = sysctlFeatureEnabled("hw.optional.arm.FEAT_AES");
 	arm.sve = sysctlFeatureEnabled("hw.optional.arm.FEAT_SVE");
 #endif
 #endif
@@ -255,6 +260,8 @@ std::string CPUFeaturesImpl::GetCommaSeparatedExtensionList()
 		appendExt("I8MM");
 	if (arm.sha3)
 		appendExt("SHA3");
+	if (arm.aes)
+		appendExt("AES");
 	if (arm.sve)
 		appendExt("SVE");
 	return tmp;

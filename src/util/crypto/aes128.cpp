@@ -794,6 +794,118 @@ ATTRIBUTE_AESNI void __aesni__AES128_ECB_encrypt(uint8* input, const uint8* key,
 }
 #endif
 
+#if defined(__aarch64__)
+#include <arm_neon.h>
+
+// The Armv8 crypto extension gives us AESE/AESD/AESMC/AESIMC. Without this the emulator
+// falls back to the table-driven software AES, which profiling put at ~4% of all CPU time
+// during gameplay - every read from an encrypted WUX is AES-CBC decrypted, so this is on
+// the asset streaming path, not just on load.
+#define ATTRIBUTE_ARMAES __attribute__((target("+crypto")))
+
+// Armv8 has no AESKEYGENASSIST equivalent, so the schedule is computed in scalar code.
+// It runs once per decrypt call rather than per block.
+static void ARMAES128_KeyExpansionEncrypt(const uint8* userKey, uint8* roundKeys)
+{
+	static const uint8 rcon[10] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36};
+	memcpy(roundKeys, userKey, 16);
+	for (sint32 i = 1; i <= 10; i++)
+	{
+		const uint8* prev = roundKeys + (i - 1) * 16;
+		uint8* cur = roundKeys + i * 16;
+		// RotWord + SubWord + Rcon applied to the last column of the previous round key
+		cur[0] = prev[0] ^ sbox[prev[13]] ^ rcon[i - 1];
+		cur[1] = prev[1] ^ sbox[prev[14]];
+		cur[2] = prev[2] ^ sbox[prev[15]];
+		cur[3] = prev[3] ^ sbox[prev[12]];
+		for (sint32 c = 4; c < 16; c++)
+			cur[c] = prev[c] ^ cur[c - 4];
+	}
+}
+
+// AESD expects the equivalent inverse cipher schedule: the encryption schedule in reverse
+// round order, with InvMixColumns applied to everything except the first and last key.
+ATTRIBUTE_ARMAES static void ARMAES128_KeyExpansionDecrypt(const uint8* userKey, uint8* decKeys)
+{
+	alignas(16) uint8 enc[11 * 16];
+	ARMAES128_KeyExpansionEncrypt(userKey, enc);
+	vst1q_u8(decKeys, vld1q_u8(enc + 10 * 16));
+	for (sint32 i = 1; i < 10; i++)
+		vst1q_u8(decKeys + i * 16, vaesimcq_u8(vld1q_u8(enc + (10 - i) * 16)));
+	vst1q_u8(decKeys + 10 * 16, vld1q_u8(enc));
+}
+
+ATTRIBUTE_ARMAES static void __armaes__AES128_CBC_decrypt(uint8* output, uint8* input, uint32 length, const uint8* key, const uint8* iv)
+{
+	alignas(16) uint8 dk[11 * 16];
+	ARMAES128_KeyExpansionDecrypt(key, dk);
+	uint8x16_t feedback = iv ? vld1q_u8(iv) : vdupq_n_u8(0);
+	const uint32 blockCount = length / 16;
+	for (uint32 b = 0; b < blockCount; b++)
+	{
+		const uint8x16_t cipherBlock = vld1q_u8(input + b * 16);
+		uint8x16_t state = cipherBlock;
+		// vaesdq does AddRoundKey + InvShiftRows + InvSubBytes; vaesimcq is InvMixColumns
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 0 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 1 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 2 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 3 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 4 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 5 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 6 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 7 * 16)));
+		state = vaesimcq_u8(vaesdq_u8(state, vld1q_u8(dk + 8 * 16)));
+		state = vaesdq_u8(state, vld1q_u8(dk + 9 * 16));
+		state = veorq_u8(state, vld1q_u8(dk + 10 * 16));
+		state = veorq_u8(state, feedback);
+		vst1q_u8(output + b * 16, state);
+		feedback = cipherBlock;
+	}
+}
+
+ATTRIBUTE_ARMAES static void __armaes__AES128_ECB_encrypt(uint8* input, const uint8* key, uint8* output)
+{
+	alignas(16) uint8 rk[11 * 16];
+	ARMAES128_KeyExpansionEncrypt(key, rk);
+	uint8x16_t state = vld1q_u8(input);
+	// vaeseq does AddRoundKey + SubBytes + ShiftRows; vaesmcq is MixColumns
+	for (sint32 i = 0; i < 9; i++)
+		state = vaesmcq_u8(vaeseq_u8(state, vld1q_u8(rk + i * 16)));
+	state = vaeseq_u8(state, vld1q_u8(rk + 9 * 16));
+	state = veorq_u8(state, vld1q_u8(rk + 10 * 16));
+	vst1q_u8(output, state);
+}
+
+// Getting the equivalent inverse cipher schedule subtly wrong would silently corrupt every
+// decrypted disc read, so the fast path is only installed if it reproduces the software
+// implementation exactly on a test vector.
+static bool ARMAES128_SelfTest()
+{
+	static const uint8 testKey[16] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+									  0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
+	static const uint8 testIv[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+									 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+	uint8 cipherText[32];
+	for (sint32 i = 0; i < 32; i++)
+		cipherText[i] = (uint8)(i * 7 + 3);
+
+	uint8 refOut[32], armOut[32];
+	uint8 refIn[32], armIn[32];
+	memcpy(refIn, cipherText, sizeof(refIn));
+	memcpy(armIn, cipherText, sizeof(armIn));
+	__soft__AES128_CBC_decrypt(refOut, refIn, sizeof(refIn), testKey, testIv);
+	__armaes__AES128_CBC_decrypt(armOut, armIn, sizeof(armIn), testKey, testIv);
+	if (memcmp(refOut, armOut, sizeof(refOut)) != 0)
+		return false;
+
+	uint8 refEcb[16], armEcb[16], ecbIn[16];
+	memcpy(ecbIn, cipherText, sizeof(ecbIn));
+	__soft__AES128_ECB_encrypt(ecbIn, testKey, refEcb);
+	__armaes__AES128_ECB_encrypt(ecbIn, testKey, armEcb);
+	return memcmp(refEcb, armEcb, sizeof(refEcb)) == 0;
+}
+#endif // defined(__aarch64__)
+
 void(*AES128_ECB_encrypt)(uint8* input, const uint8* key, uint8* output);
 void (*AES128_CBC_decrypt)(uint8* output, uint8* input, uint32 length, const uint8* key, const uint8* iv) = nullptr;
 
@@ -847,6 +959,17 @@ void AES128_init()
 	else
 	{
 		// basic software implementation
+		AES128_CBC_decrypt = __soft__AES128_CBC_decrypt;
+		AES128_ECB_encrypt = __soft__AES128_ECB_encrypt;
+	}
+    #elif defined(__aarch64__)
+	if (g_CPUFeatures.arm.aes && ARMAES128_SelfTest())
+	{
+		AES128_CBC_decrypt = __armaes__AES128_CBC_decrypt;
+		AES128_ECB_encrypt = __armaes__AES128_ECB_encrypt;
+	}
+	else
+	{
 		AES128_CBC_decrypt = __soft__AES128_CBC_decrypt;
 		AES128_ECB_encrypt = __soft__AES128_ECB_encrypt;
 	}
