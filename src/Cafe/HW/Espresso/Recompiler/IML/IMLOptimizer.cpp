@@ -703,9 +703,21 @@ void IMLOptimizer_StandardOptimizationPassForSegment(IMLOptimizerRegIOAnalysis& 
 {
 	IMLOptimizer_RemoveDeadCodeFromSegment(regIoAnalysis, seg);
 
-#ifdef ARCH_X86_64
-	// x86 specific optimizations
-	IMLOptimizerX86_SubstituteCJumpForEflagsJump(regIoAnalysis, seg); // this pass should be applied late since it creates invisible eflags dependencies (which would break further register dependency analysis)
+#if defined(ARCH_X86_64) || defined(__aarch64__)
+	// Fuse compare + conditional jump into a flags-based jump. Despite the X86 in the name this
+	// is not x86 specific: AArch64 has NZCV with the same semantics for this purpose, CMP sets
+	// the flags and B.cond consumes them, so the boolean register the compare would otherwise
+	// materialise is pure overhead. Compare-and-branch is a large share of the executed opcode
+	// mix (cmpi + bc were ~15% in a Star Fox Zero hot block profile), and without this AArch64
+	// was paying an extra CSET plus a register for every one of them.
+	//
+	// Safe on AArch64 because IMLOptimizerX86_ModifiesEFlags is extremely conservative - it only
+	// allows NAME_R, R_NAME and ASSIGN between the compare and the jump, which lower to LDR, STR
+	// and MOV here, none of which touch the condition flags.
+	//
+	// This pass should be applied late since it creates invisible eflags dependencies (which
+	// would break further register dependency analysis)
+	IMLOptimizerX86_SubstituteCJumpForEflagsJump(regIoAnalysis, seg);
 #endif
 }
 

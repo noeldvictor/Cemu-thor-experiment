@@ -121,10 +121,41 @@ struct NegativeRegValueJumpInfo
 	WReg regValue;
 };
 
+// Branch taken straight off the condition flags left by a preceding compare, with no boolean
+// register materialised in between.
+struct ConditionalFlagsJumpInfo
+{
+	IMLSegment* target;
+	Cond cond;
+};
+
 using JumpInfo = std::variant<
 	UnconditionalJumpInfo,
 	ConditionalRegJumpInfo,
-	NegativeRegValueJumpInfo>;
+	NegativeRegValueJumpInfo,
+	ConditionalFlagsJumpInfo>;
+
+// Exact inverses per the condition code table in the Arm ARM (C1.2.4). Only the conditions
+// ImlCondToArm64Cond can produce need to be handled.
+static Cond InvertArm64Cond(Cond cond)
+{
+	switch (cond)
+	{
+	case Cond::EQ: return Cond::NE;
+	case Cond::NE: return Cond::EQ;
+	case Cond::HI: return Cond::LS;
+	case Cond::LS: return Cond::HI;
+	case Cond::LO: return Cond::HS;
+	case Cond::HS: return Cond::LO;
+	case Cond::GT: return Cond::LE;
+	case Cond::LE: return Cond::GT;
+	case Cond::LT: return Cond::GE;
+	case Cond::GE: return Cond::LT;
+	default:
+		cemu_assert_suspicious();
+		return Cond::NE;
+	}
+}
 
 struct AArch64GenContext_t : CodeGenerator
 {
@@ -156,6 +187,7 @@ struct AArch64GenContext_t : CodeGenerator
 	void fpr_r(IMLInstruction* imlInstruction);
 	void fpr_compare(IMLInstruction* imlInstruction);
 	void cjump(IMLInstruction* imlInstruction, IMLSegment* imlSegment);
+	void cjump_flags(IMLInstruction* imlInstruction, IMLSegment* imlSegment);
 	void jump(IMLSegment* imlSegment);
 	void conditionalJumpCycleCheck(IMLSegment* imlSegment);
 	void profileEnterableSegment(uint32 ppcAddress);
@@ -240,6 +272,33 @@ struct AArch64GenContext_t : CodeGenerator
 			tbz(jump.regBool, 0, skipJump);
 		else
 			tbnz(jump.regBool, 0, skipJump);
+		addressOffset -= 4;
+
+		// in +/-128MB
+		if (-0x8000000 <= addressOffset && addressOffset <= 0x7ffffff)
+		{
+			b(addressOffset);
+			L(skipJump);
+			return true;
+		}
+
+		cemu_assert_suspicious();
+
+		return false;
+	}
+
+	bool handleJump(sint64 addressOffset, const ConditionalFlagsJumpInfo& jump)
+	{
+		// B.cond reaches +/-1MB
+		if (-0x100000 <= addressOffset && addressOffset <= 0xfffff)
+		{
+			b(jump.cond, addressOffset);
+			return true;
+		}
+
+		// too far: skip over an unconditional branch using the inverted condition
+		Label skipJump;
+		b(InvertArm64Cond(jump.cond), skipJump);
 		addressOffset -= 4;
 
 		// in +/-128MB
@@ -584,6 +643,11 @@ bool AArch64GenContext_t::r_r(IMLInstruction* imlInstruction)
 	{
 		clz(regR, regA);
 	}
+	else if (imlInstruction->operation == PPCREC_IML_OP_X86_CMP)
+	{
+		// flags-only compare, paired with PPCREC_IML_TYPE_X86_EFLAGS_JCC
+		cmp(regR, regA);
+	}
 	else
 	{
 		cemuLog_log(LogType::Recompiler, "PPCRecompilerAArch64Gen_imlInstruction_r_r(): Unsupported operation {:x}", imlInstruction->operation);
@@ -604,6 +668,11 @@ bool AArch64GenContext_t::r_s32(IMLInstruction* imlInstruction)
 	else if (imlInstruction->operation == PPCREC_IML_OP_LEFT_ROTATE)
 	{
 		ror(reg, reg, 32 - (imm32 & 0x1f));
+	}
+	else if (imlInstruction->operation == PPCREC_IML_OP_X86_CMP)
+	{
+		// flags-only compare, paired with PPCREC_IML_TYPE_X86_EFLAGS_JCC
+		cmp_imm(reg, imm32, TEMP_GPR1.WReg);
 	}
 	else
 	{
@@ -869,6 +938,19 @@ void AArch64GenContext_t::cjump(IMLInstruction* imlInstruction, IMLSegment* imlS
 		.target = imlSegment->nextSegmentBranchTaken,
 		.regBool = regBool,
 		.mustBeTrue = imlInstruction->op_conditional_jump.mustBeTrue,
+	});
+}
+
+// Jump straight off the flags set by a preceding PPCREC_IML_OP_X86_CMP. The optimizer only
+// emits this when nothing between the compare and the jump disturbs the flags.
+void AArch64GenContext_t::cjump_flags(IMLInstruction* imlInstruction, IMLSegment* imlSegment)
+{
+	Cond cond = ImlCondToArm64Cond(imlInstruction->op_x86_eflags_jcc.cond);
+	if (imlInstruction->op_x86_eflags_jcc.invertedCondition)
+		cond = InvertArm64Cond(cond);
+	prepareJump(ConditionalFlagsJumpInfo{
+		.target = imlSegment->nextSegmentBranchTaken,
+		.cond = cond,
 	});
 }
 
@@ -1582,6 +1664,10 @@ bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, 
 			else if (imlInstruction->type == PPCREC_IML_TYPE_CONDITIONAL_JUMP)
 			{
 				aarch64GenContext.cjump(imlInstruction, segIt);
+			}
+			else if (imlInstruction->type == PPCREC_IML_TYPE_X86_EFLAGS_JCC)
+			{
+				aarch64GenContext.cjump_flags(imlInstruction, segIt);
 			}
 			else if (imlInstruction->type == PPCREC_IML_TYPE_JUMP)
 			{
