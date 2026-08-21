@@ -142,6 +142,7 @@ struct AArch64GenContext_t : CodeGenerator
 	bool r_r_r_carry(IMLInstruction* imlInstruction);
 	void compare(IMLInstruction* imlInstruction);
 	void compare_s32(IMLInstruction* imlInstruction);
+	WReg emitGuestAddress(WReg memReg, sint32 memOffset, bool indexed, WReg indexReg);
 	bool load(IMLInstruction* imlInstruction, bool indexed);
 	bool store(IMLInstruction* imlInstruction, bool indexed);
 	void atomic_cmp_store(IMLInstruction* imlInstruction);
@@ -1042,6 +1043,29 @@ bool AArch64GenContext_t::macro(IMLInstruction* imlInstruction)
 	return false;
 }
 
+// Returns the W register to use as the UXTW index off MEM_BASE_REG.
+//
+// The straightforward form always went through add_imm into a temp, but add_imm with an
+// immediate of 0 still emits "add wTmp, wMem, #0". Guest code dereferences pointers at
+// offset 0 constantly (lwz rX, 0(rY) and friends dominate the hot blocks), so that was a
+// wasted instruction on a large share of all memory accesses. At offset 0 and unindexed we
+// do not need the temp at all - the guest register can index off the memory base directly,
+// since UXTW only reads the low 32 bits.
+WReg AArch64GenContext_t::emitGuestAddress(WReg memReg, sint32 memOffset, bool indexed, WReg indexReg)
+{
+	if (memOffset == 0)
+	{
+		if (!indexed)
+			return memReg;
+		add(TEMP_GPR1.WReg, memReg, indexReg);
+		return TEMP_GPR1.WReg;
+	}
+	add_imm(TEMP_GPR1.WReg, memReg, memOffset, TEMP_GPR1.WReg);
+	if (indexed)
+		add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, indexReg);
+	return TEMP_GPR1.WReg;
+}
+
 bool AArch64GenContext_t::load(IMLInstruction* imlInstruction, bool indexed)
 {
 	cemu_assert_debug(imlInstruction->op_storeLoad.registerData.GetRegFormat() == IMLRegFormat::I32);
@@ -1055,11 +1079,9 @@ bool AArch64GenContext_t::load(IMLInstruction* imlInstruction, bool indexed)
 	WReg memReg = gpReg<WReg>(imlInstruction->op_storeLoad.registerMem);
 	WReg dataReg = gpReg<WReg>(imlInstruction->op_storeLoad.registerData);
 
-	add_imm(TEMP_GPR1.WReg, memReg, memOffset, TEMP_GPR1.WReg);
-	if (indexed)
-		add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, gpReg<WReg>(imlInstruction->op_storeLoad.registerMem2));
+	WReg addrReg = emitGuestAddress(memReg, memOffset, indexed, indexed ? gpReg<WReg>(imlInstruction->op_storeLoad.registerMem2) : wzr);
 
-	auto adr = AdrExt(MEM_BASE_REG, TEMP_GPR1.WReg, ExtMod::UXTW);
+	auto adr = AdrExt(MEM_BASE_REG, addrReg, ExtMod::UXTW);
 	if (imlInstruction->op_storeLoad.copyWidth == 32)
 	{
 		ldr(dataReg, adr);
@@ -1111,10 +1133,8 @@ bool AArch64GenContext_t::store(IMLInstruction* imlInstruction, bool indexed)
 	sint32 memOffset = imlInstruction->op_storeLoad.immS32;
 	bool swapEndian = imlInstruction->op_storeLoad.flags2.swapEndian;
 
-	add_imm(TEMP_GPR1.WReg, memReg, memOffset, TEMP_GPR1.WReg);
-	if (indexed)
-		add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, gpReg<WReg>(imlInstruction->op_storeLoad.registerMem2));
-	AdrExt adr = AdrExt(MEM_BASE_REG, TEMP_GPR1.WReg, ExtMod::UXTW);
+	WReg addrReg = emitGuestAddress(memReg, memOffset, indexed, indexed ? gpReg<WReg>(imlInstruction->op_storeLoad.registerMem2) : wzr);
+	AdrExt adr = AdrExt(MEM_BASE_REG, addrReg, ExtMod::UXTW);
 	if (imlInstruction->op_storeLoad.copyWidth == 32)
 	{
 		if (swapEndian)
@@ -1196,10 +1216,8 @@ bool AArch64GenContext_t::fpr_load(IMLInstruction* imlInstruction, bool indexed)
 
 	if (mode == PPCREC_FPR_LD_MODE_SINGLE)
 	{
-		add_imm(TEMP_GPR1.WReg, realRegisterMem, adrOffset, TEMP_GPR1.WReg);
-		if (indexed)
-			add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, indexReg);
-		ldr(TEMP_GPR2.WReg, AdrExt(MEM_BASE_REG, TEMP_GPR1.WReg, ExtMod::UXTW));
+		WReg addrReg = emitGuestAddress(realRegisterMem, adrOffset, indexed, indexReg);
+		ldr(TEMP_GPR2.WReg, AdrExt(MEM_BASE_REG, addrReg, ExtMod::UXTW));
 		rev(TEMP_GPR2.WReg, TEMP_GPR2.WReg);
 		fmov(dataSReg, TEMP_GPR2.WReg);
 
@@ -1214,10 +1232,8 @@ bool AArch64GenContext_t::fpr_load(IMLInstruction* imlInstruction, bool indexed)
 	}
 	else if (mode == PPCREC_FPR_LD_MODE_DOUBLE)
 	{
-		add_imm(TEMP_GPR1.WReg, realRegisterMem, adrOffset, TEMP_GPR1.WReg);
-		if (indexed)
-			add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, indexReg);
-		ldr(TEMP_GPR2.XReg, AdrExt(MEM_BASE_REG, TEMP_GPR1.WReg, ExtMod::UXTW));
+		WReg addrReg = emitGuestAddress(realRegisterMem, adrOffset, indexed, indexReg);
+		ldr(TEMP_GPR2.XReg, AdrExt(MEM_BASE_REG, addrReg, ExtMod::UXTW));
 		rev(TEMP_GPR2.XReg, TEMP_GPR2.XReg);
 		fmov(dataDReg, TEMP_GPR2.XReg);
 	}
@@ -1241,9 +1257,7 @@ bool AArch64GenContext_t::fpr_store(IMLInstruction* imlInstruction, bool indexed
 
 	if (mode == PPCREC_FPR_ST_MODE_SINGLE)
 	{
-		add_imm(TEMP_GPR1.WReg, memReg, memOffset, TEMP_GPR1.WReg);
-		if (indexed)
-			add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, indexReg);
+		WReg addrReg = emitGuestAddress(memReg, memOffset, indexed, indexReg);
 
 		if (imlInstruction->op_storeLoad.flags2.notExpanded)
 		{
@@ -1256,25 +1270,21 @@ bool AArch64GenContext_t::fpr_store(IMLInstruction* imlInstruction, bool indexed
 			fmov(TEMP_GPR2.WReg, TEMP_FPR.SReg);
 		}
 		rev(TEMP_GPR2.WReg, TEMP_GPR2.WReg);
-		str(TEMP_GPR2.WReg, AdrExt(MEM_BASE_REG, TEMP_GPR1.WReg, ExtMod::UXTW));
+		str(TEMP_GPR2.WReg, AdrExt(MEM_BASE_REG, addrReg, ExtMod::UXTW));
 	}
 	else if (mode == PPCREC_FPR_ST_MODE_DOUBLE)
 	{
-		add_imm(TEMP_GPR1.WReg, memReg, memOffset, TEMP_GPR1.WReg);
-		if (indexed)
-			add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, indexReg);
+		WReg addrReg = emitGuestAddress(memReg, memOffset, indexed, indexReg);
 		fmov(TEMP_GPR2.XReg, dataDReg);
 		rev(TEMP_GPR2.XReg, TEMP_GPR2.XReg);
-		str(TEMP_GPR2.XReg, AdrExt(MEM_BASE_REG, TEMP_GPR1.WReg, ExtMod::UXTW));
+		str(TEMP_GPR2.XReg, AdrExt(MEM_BASE_REG, addrReg, ExtMod::UXTW));
 	}
 	else if (mode == PPCREC_FPR_ST_MODE_UI32_FROM_PS0)
 	{
-		add_imm(TEMP_GPR1.WReg, memReg, memOffset, TEMP_GPR1.WReg);
-		if (indexed)
-			add(TEMP_GPR1.WReg, TEMP_GPR1.WReg, indexReg);
+		WReg addrReg = emitGuestAddress(memReg, memOffset, indexed, indexReg);
 		fmov(TEMP_GPR2.WReg, dataSReg);
 		rev(TEMP_GPR2.WReg, TEMP_GPR2.WReg);
-		str(TEMP_GPR2.WReg, AdrExt(MEM_BASE_REG, TEMP_GPR1.WReg, ExtMod::UXTW));
+		str(TEMP_GPR2.WReg, AdrExt(MEM_BASE_REG, addrReg, ExtMod::UXTW));
 	}
 	else
 	{
