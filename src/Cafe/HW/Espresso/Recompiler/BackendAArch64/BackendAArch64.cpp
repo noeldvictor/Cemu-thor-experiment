@@ -171,7 +171,7 @@ struct AArch64GenContext_t : CodeGenerator
 	bool r_r_s32_carry(IMLInstruction* imlInstruction);
 	bool r_r_r(IMLInstruction* imlInstruction);
 	bool r_r_r_carry(IMLInstruction* imlInstruction);
-	void compare(IMLInstruction* imlInstruction);
+	void compare(IMLInstruction* imlInstruction, bool reuseFlags);
 	void compare_s32(IMLInstruction* imlInstruction, bool reuseFlags);
 	WReg emitGuestAddress(WReg memReg, sint32 memOffset, bool indexed, WReg indexReg);
 	bool load(IMLInstruction* imlInstruction, bool indexed);
@@ -185,7 +185,7 @@ struct AArch64GenContext_t : CodeGenerator
 	void fpr_r_r_r(IMLInstruction* imlInstruction);
 	void fpr_r_r_r_r(IMLInstruction* imlInstruction);
 	void fpr_r(IMLInstruction* imlInstruction);
-	void fpr_compare(IMLInstruction* imlInstruction);
+	void fpr_compare(IMLInstruction* imlInstruction, bool reuseFlags);
 	void cjump(IMLInstruction* imlInstruction, IMLSegment* imlSegment);
 	void cjump_flags(IMLInstruction* imlInstruction, IMLSegment* imlSegment);
 	void jump(IMLSegment* imlSegment);
@@ -935,13 +935,14 @@ Cond ImlCondToArm64Cond(IMLCondition condition)
 	}
 }
 
-void AArch64GenContext_t::compare(IMLInstruction* imlInstruction)
+void AArch64GenContext_t::compare(IMLInstruction* imlInstruction, bool reuseFlags)
 {
 	WReg regR = gpReg<WReg>(imlInstruction->op_compare.regR);
 	WReg regA = gpReg<WReg>(imlInstruction->op_compare.regA);
 	WReg regB = gpReg<WReg>(imlInstruction->op_compare.regB);
 	Cond cond = ImlCondToArm64Cond(imlInstruction->op_compare.cond);
-	cmp(regA, regB);
+	if (!reuseFlags)
+		cmp(regA, regB);
 	cset(regR, cond);
 }
 
@@ -1581,13 +1582,14 @@ Cond ImlFPCondToArm64Cond(IMLCondition cond)
 	}
 }
 
-void AArch64GenContext_t::fpr_compare(IMLInstruction* imlInstruction)
+void AArch64GenContext_t::fpr_compare(IMLInstruction* imlInstruction, bool reuseFlags)
 {
 	WReg regR = gpReg<WReg>(imlInstruction->op_fpr_compare.regR);
 	DReg regA = fpReg<DReg>(imlInstruction->op_fpr_compare.regA);
 	DReg regB = fpReg<DReg>(imlInstruction->op_fpr_compare.regB);
 	auto cond = ImlFPCondToArm64Cond(imlInstruction->op_fpr_compare.cond);
-	fcmp(regA, regB);
+	if (!reuseFlags)
+		fcmp(regA, regB);
 	cset(regR, cond);
 }
 
@@ -1682,7 +1684,21 @@ bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, 
 			}
 			else if (imlInstruction->type == PPCREC_IML_TYPE_COMPARE)
 			{
-				aarch64GenContext.compare(imlInstruction);
+				// same redundancy as COMPARE_S32 below: cmp/cmpl also updates three CR bits
+				bool reuseFlags = false;
+				if (i > 0)
+				{
+					IMLInstruction* prevInstruction = segIt->imlList.data() + (i - 1);
+					if (prevInstruction->type == PPCREC_IML_TYPE_COMPARE &&
+						prevInstruction->op_compare.regA.GetRegID() == imlInstruction->op_compare.regA.GetRegID() &&
+						prevInstruction->op_compare.regB.GetRegID() == imlInstruction->op_compare.regB.GetRegID() &&
+						prevInstruction->op_compare.regR.GetRegID() != imlInstruction->op_compare.regA.GetRegID() &&
+						prevInstruction->op_compare.regR.GetRegID() != imlInstruction->op_compare.regB.GetRegID())
+					{
+						reuseFlags = true;
+					}
+				}
+				aarch64GenContext.compare(imlInstruction, reuseFlags);
 			}
 			else if (imlInstruction->type == PPCREC_IML_TYPE_COMPARE_S32)
 			{
@@ -1797,7 +1813,21 @@ bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, 
 			}
 			else if (imlInstruction->type == PPCREC_IML_TYPE_FPR_COMPARE)
 			{
-				aarch64GenContext.fpr_compare(imlInstruction);
+				// fcmpu/fcmpo set three or four CR bits from one comparison. FCMP writes the
+				// same NZCV flags CSET reads, and the destination here is a GPR so it can never
+				// clobber the FPR operands.
+				bool reuseFlags = false;
+				if (i > 0)
+				{
+					IMLInstruction* prevInstruction = segIt->imlList.data() + (i - 1);
+					if (prevInstruction->type == PPCREC_IML_TYPE_FPR_COMPARE &&
+						prevInstruction->op_fpr_compare.regA.GetRegID() == imlInstruction->op_fpr_compare.regA.GetRegID() &&
+						prevInstruction->op_fpr_compare.regB.GetRegID() == imlInstruction->op_fpr_compare.regB.GetRegID())
+					{
+						reuseFlags = true;
+					}
+				}
+				aarch64GenContext.fpr_compare(imlInstruction, reuseFlags);
 			}
 			else
 			{

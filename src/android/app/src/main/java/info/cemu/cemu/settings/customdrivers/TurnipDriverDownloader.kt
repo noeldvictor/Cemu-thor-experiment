@@ -100,25 +100,36 @@ class TurnipDriverDownloader(
     }
 
     companion object {
+        // Candidates are sorted by sortOrder before anything else, so whichever source is first
+        // here is what the Recommended button downloads - regardless of how old its newest
+        // release is. K11MCH1 used to be the obvious default, but as of 2026-08-21 its latest
+        // release is v26.0.0-rc08 from 2026-01-08, seven months stale, while MrPurple shipped
+        // T30 four days earlier and Banners-Turnip had published three builds that same day.
+        //
+        // MrPurple leads because it is both actively maintained and curated. Banners-Turnip is
+        // deliberately last: it rebuilds on every upstream Mesa commit (r7, r8 and r9 all landed
+        // on one day), which is great to have available but a poor default, since any individual
+        // build can carry an upstream regression. K11MCH1 stays high because it is the
+        // long-standing reference and may resume releases.
         private val DRIVER_SOURCES = listOf(
+            DriverSource(
+                name = "MrPurple",
+                repo = "MrPurple666/purple-turnip",
+                sortOrder = 0,
+            ),
             DriverSource(
                 name = "Kimchi / K11MCH1",
                 repo = "K11MCH1/AdrenoToolsDrivers",
-                sortOrder = 0,
+                sortOrder = 1,
             ),
             DriverSource(
                 name = "StevenMXZ",
                 repo = "StevenMXZ/Adreno-Tools-Drivers",
-                sortOrder = 1,
+                sortOrder = 2,
             ),
             DriverSource(
                 name = "Banners-Turnip",
                 repo = "The412Banner/Banners-Turnip",
-                sortOrder = 2,
-            ),
-            DriverSource(
-                name = "MrPurple",
-                repo = "MrPurple666/purple-turnip",
                 sortOrder = 3,
             ),
         )

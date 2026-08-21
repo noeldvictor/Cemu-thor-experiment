@@ -127,7 +127,23 @@ fun CustomDriversScreen(
         items(installedDrivers) {
             CustomDriverListItem(
                 driver = it,
-                onDelete = { customDriversViewModel.deleteDriver(it) },
+                onDelete = {
+                    val wasSelected = it.selected
+                    val name = it.metadata.name
+                    customDriversViewModel.deleteDriver(it)
+                    // deleting used to be silent, unlike every other action on this screen. Also
+                    // worth saying when the active driver goes, since that silently reverts the
+                    // renderer to the system Vulkan driver.
+                    coroutineScope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar(
+                            if (wasSelected)
+                                tr("Deleted %1 - now using the system driver").replace("%1", name)
+                            else
+                                tr("Deleted %1").replace("%1", name)
+                        )
+                    }
+                },
                 onSelect = { customDriversViewModel.setDriverSelected(it) }
             )
         }
@@ -186,7 +202,7 @@ private fun TurnipDriverDownloadDialog(
         text = {
             Text(
                 tr(
-                    "Download a community Turnip Vulkan driver and select it for Cemu for AYN Thor Experiment. Recommended uses Kimchi/K11MCH1; Choose includes StevenMXZ, Banners-Turnip and MrPurple builds if you are following a specific recommendation."
+                    "Download a community Turnip Vulkan driver and select it for Cemu for AYN Thor Experiment. Recommended uses MrPurple, which is actively maintained; Choose also lists Kimchi/K11MCH1, StevenMXZ and Banners-Turnip (bleeding edge, rebuilt per Mesa commit) if you are following a specific recommendation."
                 )
             )
         },
