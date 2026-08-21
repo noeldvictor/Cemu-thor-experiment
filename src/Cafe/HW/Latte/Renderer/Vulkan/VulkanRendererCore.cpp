@@ -1632,7 +1632,7 @@ void VulkanRenderer::draw_execute_continued(uint32 baseVertex, uint32 baseInstan
 	}
 	else
 	{
-		__debugbreak(); // should never happen unless draw_prepareDescriptorSets can fail?
+		DEBUG_BREAK; // should never happen unless draw_prepareDescriptorSets can fail?
 	}
 
 	draw_setRenderPass();

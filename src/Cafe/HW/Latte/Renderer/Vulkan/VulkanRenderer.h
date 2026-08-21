@@ -94,7 +94,7 @@ public:
 	};
 	using DescriptorSetCache = ska::flat_hash_map<uint64, VkDescriptorSetInfo*, direct_hash<uint64>>;
 
-	FORCEINLINE DescriptorSetCache& GetDescriptorSetCache(LatteConst::ShaderType shaderType)
+	FORCE_INLINE DescriptorSetCache& GetDescriptorSetCache(LatteConst::ShaderType shaderType)
 	{
 		cemu_assert_debug(shaderType == LatteConst::ShaderType::Vertex || shaderType == LatteConst::ShaderType::Pixel || shaderType == LatteConst::ShaderType::Geometry);
 		return ds_cache[static_cast<size_t>(shaderType)];
