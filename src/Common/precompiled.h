@@ -532,9 +532,58 @@ bool match_any_of(T1&& value, Types&&... others)
     return ((value == others) || ...);
 }
 
+#if defined(__aarch64__) && !defined(_WIN32)
+// AArch64 exposes the architectural counter to userspace, so a timestamp needs no libc call
+// and no vdso call - just mrs CNTVCT_EL0.
+//
+// This is worth doing because now_cached() sits in an unbounded loop: the main guest core's
+// idle fiber (coreinit::__OSThreadCoreIdle) never blocks, it spins calling
+// __OSCheckSystemEvents() -> AXOut_update(), and AXOut_update() takes a timestamp *before*
+// its rate-limit check. Profiling Star Fox Zero on the Thor put ~25% of all emulator CPU in
+// __kernel_clock_gettime, ~99% of it on that one thread.
+//
+// The counter is anchored to steady_clock once on first use so that values remain comparable
+// with std::chrono::steady_clock::now(); some call sites mix the two.
+[[nodiscard]] static inline int64_t _cntvctSteadyNanoseconds(bool& supported) noexcept
+{
+	struct CounterScale
+	{
+		uint64_t mulNsQ32; // 1e9 / CNTFRQ in 32.32 fixed point
+		int64_t offsetNs;  // steady_clock epoch - counter epoch
+		bool ok;
+	};
+	static const CounterScale s = []() -> CounterScale {
+		uint64_t freq = 0;
+		asm volatile("mrs %0, cntfrq_el0" : "=r"(freq));
+		if (freq == 0)
+			return {0, 0, false}; // firmware left it unprogrammed
+		const uint64_t mul = (uint64_t)(((unsigned __int128)1000000000ull << 32) / freq);
+		uint64_t cnt = 0;
+		asm volatile("mrs %0, cntvct_el0" : "=r"(cnt));
+		const int64_t cntNs = (int64_t)(uint64_t)(((unsigned __int128)cnt * mul) >> 32);
+		const int64_t steadyNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+									 std::chrono::steady_clock::now().time_since_epoch())
+									 .count();
+		return {mul, steadyNs - cntNs, true};
+	}();
+	supported = s.ok;
+	if (!s.ok)
+		return 0;
+	uint64_t cnt = 0;
+	asm volatile("mrs %0, cntvct_el0" : "=r"(cnt));
+	return (int64_t)(uint64_t)(((unsigned __int128)cnt * s.mulNsQ32) >> 32) + s.offsetNs;
+}
+#endif
+
 // we cache the frequency in a static variable
 [[nodiscard]] static std::chrono::high_resolution_clock::time_point now_cached() noexcept
 {
+#if defined(__aarch64__) && !defined(_WIN32)
+	bool supported = false;
+	const int64_t ns = _cntvctSteadyNanoseconds(supported);
+	if (supported)
+		return std::chrono::high_resolution_clock::time_point(std::chrono::nanoseconds(ns));
+#endif
 #ifdef _WIN32
     // get current time
 	static const long long _Freq = _Query_perf_frequency();	// doesn't change after system boot
@@ -550,6 +599,12 @@ bool match_any_of(T1&& value, Types&&... others)
 
 [[nodiscard]] static std::chrono::steady_clock::time_point tick_cached() noexcept
 {
+#if defined(__aarch64__) && !defined(_WIN32)
+	bool supported = false;
+	const int64_t ns = _cntvctSteadyNanoseconds(supported);
+	if (supported)
+		return std::chrono::steady_clock::time_point(std::chrono::nanoseconds(ns));
+#endif
 #if BOOST_OS_WINDOWS
     // get current time
 	static const long long _Freq = _Query_perf_frequency();	// doesn't change after system boot

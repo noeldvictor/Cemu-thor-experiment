@@ -212,6 +212,9 @@ uint64 PPCTimer_tscToMicroseconds(uint64 us);
 uint64 PPCTimer_getRawTsc();
 
 void PPCTimer_start();
+#if defined(__aarch64__)
+void PPCTimer_rebaseForShiftChange(uint8 newShift);
+#endif
 
 // core info and control
 extern uint32 ppcThreadQuantum;

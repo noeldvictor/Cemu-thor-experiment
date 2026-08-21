@@ -110,6 +110,53 @@ The PDFs are deliberately **gitignored** (`docs/reference/**/*.pdf`) because the
 
 Use the right manual for the question. The Arm ARM is the architecture: what an instruction is *defined* to do, including exact NaN and saturation behavior — reach for it on correctness questions. The per-core software optimization guides are the microarchitecture: latency, throughput, and which issue pipe — reach for those on performance questions. Neither answers the other's question. `Read` cannot render these PDFs; use pypdf.
 
+## Device Test Etiquette
+
+The AYN Thor is a real device someone else is also using. When running tests, launch the
+game yourself and **shut the emulator down when the test is finished** - do not leave a
+title running:
+
+```sh
+adb shell "am start -n info.cemu.cemu_thor/info.cemu.cemu.emulation.EmulationActivity --es info.cemu.cemu_thor.LaunchPath '/storage/2664-21DE/Roms/wiiu/Star Fox Zero (USA) (En,Fr,Es).wux'"
+# ... run the test ...
+adb shell am force-stop info.cemu.cemu_thor
+```
+
+Note the activity class is `info.cemu.cemu.emulation.EmulationActivity` - the Kotlin
+namespace stayed `info.cemu.cemu` while the application id is `info.cemu.cemu_thor`, so
+`info.cemu.cemu_thor/info.cemu.cemu_thor.…` will not resolve.
+
+If a measurement looks odd, check whether someone is holding the device: an interactive
+session will open the side menu or change scenes underneath a capture and quietly invalidate
+an A/B.
+
+## No LLVM Recompiler Backend
+
+Decided against porting an RPCS3-style LLVM JIT backend (2026-08-20). Recording the reasons
+so it does not get re-proposed:
+
+- **The bottleneck is not guest code quality.** On-device profiling put ~40% of emulator CPU
+  in host-side overhead - clock reads, `OSGetTime`, mutexes, atomics - against 40.7% in the
+  JIT'd guest code. A 20% codegen win would buy ~8% overall while that 40% sits untouched.
+- **RPCS3's ARM64 gains came from fighting LLVM, not from having it.** Their shipped wins
+  were instruction-selection fixes (ISB spin, timer scaling, `fmax`/`fmin`, `TBL`, `USHL`,
+  `UDOT`, inline `CNTVCT`). PR 18816 exists *because* LLVM emitted two junk instructions;
+  they filed llvm/llvm-project#200698 and shipped a workaround meanwhile. With the
+  hand-written emitter here, `slw`/`srw` and the zero-offset address path were each fixed in
+  minutes.
+- **Espresso is the wrong guest for it.** RPCS3 needs LLVM because SPU code is vector-heavy
+  with large basic blocks where cross-block optimisation pays. Espresso is 32-bit PowerPC
+  with paired singles and no vector unit, so translation is close to 1:1 and IML already does
+  register allocation. The hot-block profile is diffuse - top 200 of 24221 blocks is 46% -
+  which favours broad instruction-selection wins, exactly what the current backend does well.
+- **The compile-time model does not fit.** RPCS3's PPU LLVM is effectively whole-module AOT at
+  load, cached to disk. Cemu recompiles per function on demand and has **no persistent
+  recompiler cache**, so LLVM would mean multi-minute loads or heavy in-game stutter. Building
+  that cache is the more valuable project and would be the prerequisite anyway.
+- Plus many months of work and ~50-100MB of LLVM in the APK.
+
+Revisit only if a profile shows guest code quality dominating with large hot blocks.
+
 ## Profiling On Device
 
 The release build carries `<profileable android:shell="true"/>`, so simpleperf works
@@ -141,6 +188,26 @@ Latte/IOSU threads - a 3 instruction to 2 improvement in the recompiler's load p
 measured as 7922 vs 7897 ticks, i.e. noise. Per-symbol profiles are the sensitive
 instrument. `OSSched[core=1]` is the guest main thread and the one that matters; it burns
 roughly 4x the CPU of cores 0 and 2.
+
+### The guest clock is the hot path, and it is x86-shaped
+
+Guest code polls time constantly, so everything on that path matters. `coreinit::OSGetTime()`
+measured 7.8% of all emulator CPU with a further 3.6% in its spinlock's atomic swap, and
+every guest `mftb` routes through the same function.
+
+The original design accumulates deltas into a shared 128-bit accumulator under a global
+`FSpinlock`, with an `mfence` and a 128-bit division per call. That exists because x86 cannot
+assume the TSC is uniform across cores. **AArch64 can**: `CNTVCT_EL0` is one monotonic counter
+shared by every core, so the guest tick count is a pure function of it - no shared state, no
+lock, no barrier, no division. The ARM path now computes it directly with a 32.32 fixed-point
+multiply (`mul`+`umulh`), and only the timer shift factor makes it stateful; that changes
+rarely and is republished by the writer through a seqlock.
+
+Do not reintroduce a global lock here. Three emulated cores were serialising on one lock to
+read a counter that is already coherent between them.
+
+Related: `_udiv128` is not an instruction on AArch64 - `precompiled.h` implements it with
+`unsigned __int128`, which lowers to a `__udivti3` libcall.
 
 ### Open: half of the guest main thread is in the vdso clock read
 

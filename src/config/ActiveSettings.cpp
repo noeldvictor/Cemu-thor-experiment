@@ -3,6 +3,7 @@
 #include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanAPI.h"
 #include "Cafe/CafeSystem.h"
+#include "Cafe/HW/Espresso/PPCState.h"
 #include "Cemu/Logging/CemuLogging.h"
 #include "config/ActiveSettings.h"
 #include "config/LaunchSettings.h"
@@ -86,7 +87,14 @@ uint8 ActiveSettings::GetTimerShiftFactor()
 
 void ActiveSettings::SetTimerShiftFactor(uint8 shiftFactor)
 {
+	if (s_timer_shift == shiftFactor)
+		return;
 	s_timer_shift = shiftFactor;
+#if defined(__aarch64__)
+	// the AArch64 guest timer derives ticks straight from CNTVCT_EL0, so the base point has
+	// to be republished whenever the scale changes or time would jump
+	PPCTimer_rebaseForShiftChange(shiftFactor);
+#endif
 }
 
 PrecompiledShaderOption ActiveSettings::GetPrecompiledShadersOption()

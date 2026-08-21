@@ -22,6 +22,33 @@ static_assert(sizeof(uint128_t) == 16);
 
 uint128_t _rdtscAcc{};
 
+#if defined(__aarch64__)
+// On AArch64 the guest timer does not need the accumulate-under-a-global-lock design that
+// the x86 path uses. CNTVCT_EL0 is a single monotonic counter shared by every core, so the
+// guest tick count is a pure function of it and needs no shared mutable state, no lock, no
+// barrier and no division.
+//
+// This matters because guest code polls the time constantly: profiling Star Fox Zero put
+// coreinit::OSGetTime() at 7.8% of all emulator CPU with another 3.6% in the spinlock's
+// atomic swap, and every guest mftb routes through here as well. All three emulated cores
+// were serialising on one lock to read a counter that is already coherent between them.
+//
+// Only the timer shift factor (used by fast forward) makes this stateful, and it changes
+// rarely, so the base point is republished by the writer and read through a seqlock.
+static std::atomic<uint64> sTimerSeq{0};
+static uint64 sTimerBaseCnt = 0;   // counter value when the current shift took effect
+static uint64 sTimerBaseTicks = 0; // guest ticks accumulated before that point
+static uint8 sTimerBaseShift = 3;
+static uint64 sTimerCntToCoreMul = 0; // CORE_CLOCK / CNTFRQ in 32.32 fixed point
+
+static uint64 PPCTimer_rawTicksSince(uint64 baseCnt, uint64 nowCnt)
+{
+	const uint64 delta = nowCnt - baseCnt;
+	// 64x64->128 multiply is mul+umulh here, so this is cheaper than any division
+	return (uint64)(((unsigned __int128)delta * sTimerCntToCoreMul) >> 32);
+}
+#endif
+
 uint64 muldiv64(uint64 a, uint64 b, uint64 d)
 {
 	uint64 diva = a / d;
@@ -113,6 +140,17 @@ void PPCTimer_start()
 {
 	_rdtscLastMeasure = __rdtsc();
 	_tickSummary = 0;
+#if defined(__aarch64__)
+	if (_rdtscFrequency != 0)
+	{
+		// CORE_CLOCK / CNTFRQ in 32.32 fixed point. The relative error is below 2^-32, i.e.
+		// under one guest tick per four billion, so there is no meaningful drift.
+		sTimerCntToCoreMul = (uint64)(((unsigned __int128)Espresso::CORE_CLOCK << 32) / _rdtscFrequency);
+		sTimerBaseCnt = _rdtscLastMeasure;
+		sTimerBaseTicks = 0;
+		sTimerBaseShift = ActiveSettings::GetTimerShiftFactor();
+	}
+#endif
 }
 
 uint64 PPCTimer_getRawTsc()
@@ -148,9 +186,49 @@ void PPCTimer_waitForInit()
 
 FSpinlock sTimerSpinlock;
 
+#if defined(__aarch64__)
+void PPCTimer_rebaseForShiftChange(uint8 newShift)
+{
+	sTimerSpinlock.lock();
+	const uint64 nowCnt = __rdtsc();
+	const uint64 raw = PPCTimer_rawTicksSince(sTimerBaseCnt, nowCnt);
+	sTimerSeq.fetch_add(1, std::memory_order_release); // mark writer active (odd)
+	sTimerBaseTicks = sTimerBaseTicks + ((raw << 3) >> sTimerBaseShift);
+	sTimerBaseCnt = nowCnt;
+	sTimerBaseShift = newShift;
+	sTimerSeq.fetch_add(1, std::memory_order_release); // publish (even)
+	sTimerSpinlock.unlock();
+}
+
+static uint64 PPCTimer_getFromCNTVCT()
+{
+	const uint64 nowCnt = __rdtsc();
+	uint64 baseCnt, baseTicks;
+	uint8 baseShift;
+	for (;;)
+	{
+		const uint64 seq = sTimerSeq.load(std::memory_order_acquire);
+		if (seq & 1)
+			continue; // a rebase is in progress
+		baseCnt = sTimerBaseCnt;
+		baseTicks = sTimerBaseTicks;
+		baseShift = sTimerBaseShift;
+		std::atomic_thread_fence(std::memory_order_acquire);
+		if (sTimerSeq.load(std::memory_order_relaxed) == seq)
+			break;
+	}
+	const uint64 raw = PPCTimer_rawTicksSince(baseCnt, nowCnt);
+	return baseTicks + ((raw << 3) >> baseShift);
+}
+#endif
+
 // thread safe
 uint64 PPCTimer_getFromRDTSC()
 {
+#if defined(__aarch64__)
+	if (sTimerCntToCoreMul != 0)
+		return PPCTimer_getFromCNTVCT();
+#endif
 	sTimerSpinlock.lock();
 	_mm_mfence();
 	uint64 rdtscCurrentMeasure = __rdtsc();
