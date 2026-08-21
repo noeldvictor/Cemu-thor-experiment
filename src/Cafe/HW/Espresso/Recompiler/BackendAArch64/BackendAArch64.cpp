@@ -734,6 +734,11 @@ bool AArch64GenContext_t::r_r_r(IMLInstruction* imlInstruction)
 		// above bit 31, leaving the 32 bit view zero. The x64 backend already uses this
 		// same trick with BMI2 SHLX. Saves the tst/csel and the flag dependency.
 		lsl(reg64Result, aliasAs<XReg>(regOperand1), aliasAs<XReg>(regOperand2));
+		// A left shift of 1..31 moves source bits above bit 31, so the upper half of the
+		// X alias is now dirty. Re-normalize it: SRW below reads the X alias directly and
+		// depends on 32 bit IML registers having a zero upper half, so leaving this dirty
+		// silently miscompiles an srw that consumes an slw result.
+		mov(regResult, regResult);
 	}
 	else if (imlInstruction->operation == PPCREC_IML_OP_SRW)
 	{
