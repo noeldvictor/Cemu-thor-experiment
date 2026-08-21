@@ -728,15 +728,19 @@ bool AArch64GenContext_t::r_r_r(IMLInstruction* imlInstruction)
 	}
 	else if (imlInstruction->operation == PPCREC_IML_OP_SLW)
 	{
-		tst(regOperand2, 32);
-		lsl(regResult, regOperand1, regOperand2);
-		csel(regResult, regResult, wzr, Cond::EQ);
+		// PPC slw takes the shift amount from rB&0x3F and yields 0 for amounts >= 32.
+		// A 64 bit shift gives exactly that for free: the amount is masked mod 64 (so
+		// rB&0x3F, which is what we want) and any amount >= 32 pushes every source bit
+		// above bit 31, leaving the 32 bit view zero. The x64 backend already uses this
+		// same trick with BMI2 SHLX. Saves the tst/csel and the flag dependency.
+		lsl(reg64Result, aliasAs<XReg>(regOperand1), aliasAs<XReg>(regOperand2));
 	}
 	else if (imlInstruction->operation == PPCREC_IML_OP_SRW)
 	{
-		tst(regOperand2, 32);
-		lsr(regResult, regOperand1, regOperand2);
-		csel(regResult, regResult, wzr, Cond::EQ);
+		// as above. Relies on the upper half of regOperand1's X alias being zero, which
+		// holds because every write to a 32 bit IML register in this backend goes through
+		// a W form instruction (and those zero-extend on AArch64).
+		lsr(reg64Result, aliasAs<XReg>(regOperand1), aliasAs<XReg>(regOperand2));
 	}
 	else if (imlInstruction->operation == PPCREC_IML_OP_LEFT_ROTATE)
 	{

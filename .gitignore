@@ -59,3 +59,7 @@ bin/graphicPacks/*
 
 # Ignore Finder view option files created by OS X
 .DS_Store
+
+# Vendor reference manuals (large PDFs kept locally, not in git)
+# See docs/reference/*/README.md for what they are and how to re-fetch.
+docs/reference/**/*.pdf

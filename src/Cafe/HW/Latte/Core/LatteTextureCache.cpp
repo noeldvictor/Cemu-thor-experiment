@@ -6,6 +6,10 @@
 
 #include <cstring>
 
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 std::unordered_set<LatteTexture*> g_allTextures;
 
 namespace
@@ -199,6 +203,30 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 #else
 				hashVal = h256.m256i_u32[0] + h256.m256i_u32[1] + h256.m256i_u32[2] + h256.m256i_u32[3] + h256.m256i_u32[4] + h256.m256i_u32[5] + h256.m256i_u32[6] + h256.m256i_u32[7];
 #endif
+			}
+#elif defined(__aarch64__)
+			if (true)
+			{
+				// NEON counterpart of the AVX2 path above. Without this the Thor runs the
+				// scalar loop below, whose rotate is loop-carried and therefore serializes
+				// the whole scan - and this runs for every large texture, every frame.
+				//
+				// It is safe for this to produce different hash values than the x86 or the
+				// scalar path: texDataHash2 is only ever compared against another hash
+				// computed for the same texture in the same process, never serialized. The
+				// AVX2 and scalar paths already disagree with each other for the same reason.
+				uint32x4_t h0 = vdupq_n_u32(0);
+				uint32x4_t h1 = vdupq_n_u32(0);
+				memRange /= 288;
+				while (memRange--)
+				{
+					// vld1q_u8 on a byte pointer - guest texture addresses are not
+					// guaranteed to be host aligned, so never cast to a wider pointer here
+					h0 = veorq_u32(h0, vreinterpretq_u32_u8(vld1q_u8(texDataU8)));
+					h1 = veorq_u32(h1, vreinterpretq_u32_u8(vld1q_u8(texDataU8 + 16)));
+					texDataU8 += 288;
+				}
+				hashVal = vaddvq_u32(veorq_u32(h0, h1));
 			}
 #else
 			if( false ) {}

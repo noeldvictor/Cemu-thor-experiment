@@ -91,7 +91,45 @@ std::string getCpuBrandNameAndroid()
     return tmp;
 }
 #endif // BOOST_PLAT_ANDROID
+
+#include <sys/auxv.h>
+#if __has_include(<asm/hwcap.h>)
+#include <asm/hwcap.h>
+#endif
+
+// Fallbacks in case the NDK/libc headers in use predate a given bit. The values
+// are fixed by the kernel ABI (Documentation/arm64/elf_hwcaps.rst).
+#ifndef HWCAP_ATOMICS
+#define HWCAP_ATOMICS (1u << 8)
+#endif
+#ifndef HWCAP_ASIMDHP
+#define HWCAP_ASIMDHP (1u << 10)
+#endif
+#ifndef HWCAP_SHA3
+#define HWCAP_SHA3 (1u << 17)
+#endif
+#ifndef HWCAP_ASIMDDP
+#define HWCAP_ASIMDDP (1u << 20)
+#endif
+#ifndef HWCAP_SVE
+#define HWCAP_SVE (1u << 22)
+#endif
+#ifndef HWCAP2_I8MM
+#define HWCAP2_I8MM (1u << 13)
+#endif
 #endif // BOOST_OS_LINUX
+
+#if BOOST_OS_MACOS
+// Apple exposes feature bits through sysctlbyname rather than auxv.
+static bool sysctlFeatureEnabled(const char* name)
+{
+	int value = 0;
+	size_t size = sizeof(value);
+	if (sysctlbyname(name, &value, &size, nullptr, 0) != 0)
+		return false;
+	return value != 0;
+}
+#endif
 #endif // defined(__aarch64__)
 
 CPUFeaturesImpl::CPUFeaturesImpl()
@@ -101,6 +139,26 @@ CPUFeaturesImpl::CPUFeaturesImpl()
 	m_cpuBrandName = getCpuBrandNameAndroid();
 #elif BOOST_OS_LINUX
 	m_cpuBrandName = getCpuBrandNameLinux();
+#endif
+
+#if BOOST_OS_LINUX
+	{
+		const unsigned long hwcap = getauxval(AT_HWCAP);
+		const unsigned long hwcap2 = getauxval(AT_HWCAP2);
+		arm.atomics = (hwcap & HWCAP_ATOMICS) != 0;
+		arm.asimdhp = (hwcap & HWCAP_ASIMDHP) != 0;
+		arm.asimddp = (hwcap & HWCAP_ASIMDDP) != 0;
+		arm.sha3 = (hwcap & HWCAP_SHA3) != 0;
+		arm.sve = (hwcap & HWCAP_SVE) != 0;
+		arm.i8mm = (hwcap2 & HWCAP2_I8MM) != 0;
+	}
+#elif BOOST_OS_MACOS
+	arm.atomics = true; // mandatory from ARMv8.1, all Apple Silicon has it
+	arm.asimdhp = sysctlFeatureEnabled("hw.optional.arm.FEAT_FP16");
+	arm.asimddp = sysctlFeatureEnabled("hw.optional.arm.FEAT_DotProd");
+	arm.i8mm = sysctlFeatureEnabled("hw.optional.arm.FEAT_I8MM");
+	arm.sha3 = sysctlFeatureEnabled("hw.optional.armv8_2_sha3");
+	arm.sve = sysctlFeatureEnabled("hw.optional.arm.FEAT_SVE");
 #endif
 #endif
 
@@ -187,6 +245,18 @@ std::string CPUFeaturesImpl::GetCommaSeparatedExtensionList()
 		appendExt("AES-NI");
 	if(x86.invariant_tsc)
 		appendExt("INVARIANT-TSC");
+	if (arm.atomics)
+		appendExt("LSE");
+	if (arm.asimdhp)
+		appendExt("FP16");
+	if (arm.asimddp)
+		appendExt("DOTPROD");
+	if (arm.i8mm)
+		appendExt("I8MM");
+	if (arm.sha3)
+		appendExt("SHA3");
+	if (arm.sve)
+		appendExt("SVE");
 	return tmp;
 }
 

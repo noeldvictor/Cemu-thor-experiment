@@ -257,6 +257,24 @@ else()
 endif()
 if(CEMU_ARCHITECTURE MATCHES "(aarch64)|(AARCH64)|(arm64)|(ARM64)")
 	add_subdirectory("dependencies/xbyak_aarch64" EXCLUDE_FROM_ALL)
+
+	# Baseline armv8-a assumes no FEAT_LSE, so every std::atomic read-modify-write
+	# compiles to an ldxr/stxr retry loop instead of a single CAS/LDADD. Cemu's hot
+	# paths are full of these (FSpinlock, coreinit spinlocks, the striped atomic HLE)
+	# and LL/SC also livelocks harder under contention, which is exactly the
+	# multi-core guest case.
+	#
+	# -moutline-atomics keeps the binary running on pre-ARMv8.1 devices by dispatching
+	# at runtime, so it is safe as the default. Building with -march=...+lse directly
+	# would be faster still but SIGILLs on hardware without LSE; if that is ever
+	# wanted it should be an explicit opt-in build, not the default.
+	if(NOT MSVC)
+		include(CheckCXXCompilerFlag)
+		check_cxx_compiler_flag("-moutline-atomics" CEMU_HAS_OUTLINE_ATOMICS)
+		if(CEMU_HAS_OUTLINE_ATOMICS)
+			add_compile_options("-moutline-atomics")
+		endif()
+	endif()
 endif()
 
 find_package(ZArchive)

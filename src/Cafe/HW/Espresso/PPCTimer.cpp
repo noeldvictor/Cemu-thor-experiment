@@ -31,6 +31,22 @@ uint64 muldiv64(uint64 a, uint64 b, uint64 d)
 	return diva * b + moda * divb + moda * modb / d;
 }
 
+// Returns the counter frequency if the hardware states it exactly, 0 if it has to be measured.
+static uint64 PPCTimer_getExactFrequency()
+{
+#if defined(__aarch64__)
+	// On AArch64 __rdtsc() is CNTVCT_EL0, whose rate is architecturally exposed in
+	// CNTFRQ_EL0 (typically exactly 19200000 on Qualcomm). Reading it is both instant
+	// and exact, where PPCTimer_estimateRDTSCFrequency() spends 3 seconds of startup
+	// producing an approximation of a number the hardware will simply tell us.
+	uint64 cntfrq = 0;
+	asm volatile("mrs %0, cntfrq_el0" : "=r"(cntfrq));
+	return cntfrq; // 0 if firmware left it unprogrammed, in which case we measure
+#else
+	return 0;
+#endif
+}
+
 uint64 PPCTimer_estimateRDTSCFrequency()
 {
     #if defined(ARCH_X86_64)
@@ -77,8 +93,17 @@ int PPCTimer_initThread()
 
 void PPCTimer_init()
 {
-	std::thread t(PPCTimer_initThread);
-	t.detach();
+	uint64 exactFrequency = PPCTimer_getExactFrequency();
+	if (exactFrequency != 0)
+	{
+		// no measurement needed, so skip the 3 second calibration thread entirely
+		_rdtscFrequency = exactFrequency;
+	}
+	else
+	{
+		std::thread t(PPCTimer_initThread);
+		t.detach();
+	}
 	_rdtscLastMeasure = __rdtsc();
 }
 
@@ -149,10 +174,24 @@ uint64 PPCTimer_getFromRDTSC()
 	_addcarry_u64(c, _rdtscAcc.high, diff.high, (unsigned long long*)&_rdtscAcc.high);
 	#endif
 
-	uint64 remainder;
-	uint64 elapsedTick = _udiv128(_rdtscAcc.high, _rdtscAcc.low, _rdtscFrequency, &remainder);
-
-	_rdtscAcc.low = remainder;
+	// The accumulator carries the remainder forward, so this stays exact either way.
+	// The high word is only non-zero when rdtscDif * CORE_CLOCK overflows 64 bits,
+	// which needs several hundred seconds between two calls at the ARM counter rate -
+	// so in practice the 64-bit path is always the one taken. That matters because
+	// AArch64 has no 128-bit divide: _udiv128 lowers to a __udivti3 software-division
+	// libcall there, while the 64-bit form below is a single udiv instruction.
+	uint64 elapsedTick;
+	if (_rdtscAcc.high == 0)
+	{
+		elapsedTick = _rdtscAcc.low / _rdtscFrequency;
+		_rdtscAcc.low = _rdtscAcc.low - elapsedTick * _rdtscFrequency;
+	}
+	else
+	{
+		uint64 remainder;
+		elapsedTick = _udiv128(_rdtscAcc.high, _rdtscAcc.low, _rdtscFrequency, &remainder);
+		_rdtscAcc.low = remainder;
+	}
 	_rdtscAcc.high = 0;
 
 	// timer scaling

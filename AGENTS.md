@@ -64,6 +64,31 @@ GX2 has a conservative tracked-register cache for redundant immediate command-bu
 
 Default to correctness and stability. Risky performance toggles must stay off by default, clearly labeled, and preferably session-only from the OSD. Measure changes with Cemu logs, `adb shell dumpsys display`, KGSL counters, and repeatable game scenes before treating them as wins.
 
+## ARM64 Reference Manuals
+
+`docs/reference/` holds primary-source vendor documentation so optimization claims can be checked against a manual instead of against folklore. `arm/` has the Arm Architecture Reference Manual (A-profile) plus the software optimization guides for all four core types in the Thor's Snapdragon 8 Gen 2 (1x Cortex-X3, 2x A715, 2x A710, 3x A510), `adreno/` has the Adreno/Qualcomm mobile best-practice text, and `snapdragon/` has the 8 Gen 2 product brief. Each directory has a `README.md` describing what the files are and how to re-fetch them.
+
+The PDFs are deliberately **gitignored** (`docs/reference/**/*.pdf`) because the Arm ARM alone is 69 MB and would trip GitHub's large-file warning in a fork that syncs against upstream Cemu. Only the READMEs and notes are tracked, so a fresh clone will have the explanations but not the PDFs.
+
+Use the right manual for the question. The Arm ARM is the architecture: what an instruction is *defined* to do, including exact NaN and saturation behavior — reach for it on correctness questions. The per-core software optimization guides are the microarchitecture: latency, throughput, and which issue pipe — reach for those on performance questions. Neither answers the other's question. `Read` cannot render these PDFs; use pypdf.
+
+## ARM64 Performance Work Derived From RPCS3
+
+`docs/research/20260820-rpcs3-arm64-optimizations-for-cemu.md` records which of RPCS3's ARM64 optimizations transfer to Cemu, with each item cross-checked against this source tree. RPCS3's measurements were taken on an AYN Odin 2, the same Snapdragon 8 Gen 2 as the Thor, so their numbers are on our silicon. Read that document before starting new ARM64 optimization work; it also lists what was checked and deliberately rejected.
+
+The structural limit is worth knowing up front: Cemu's guest is Espresso, a 750CL derivative with **no VMX** — its only SIMD is paired-singles. RPCS3 and Xenia both emulate PowerPC *with* AltiVec, so their vector items (`VPERM`/`TBL`, `vmaxfp`/`fmax`, `EOR3`/`BCAX`, 16-bit `SMULL` multiplies, `UDOT`/`SDOT`) have no guest-side counterpart here. SVE/SVE2 items are doubly irrelevant: Qualcomm shipped the 8 Gen 2 as ARMv9 without SVE. What transfers is host-side.
+
+Invariants established by that work, worth not breaking:
+
+- `_udiv128` is **not** an instruction on AArch64. `src/Common/precompiled.h` implements it with `unsigned __int128`, which lowers to a `__udivti3` software-division libcall. Keep 128-bit division off hot paths; `PPCTimer_getFromRDTSC()` takes a 64-bit fast path precisely because guest `mftb` routes through it under a process-global spinlock.
+- On AArch64 `__rdtsc()` is `CNTVCT_EL0`, and its rate is exposed exactly in `CNTFRQ_EL0` (typically 19200000 on Qualcomm). Do not reintroduce frequency calibration by measurement on ARM; it costs 3 seconds of startup to approximate a number the hardware states exactly.
+- Every write to a 32-bit IML GPR in `BackendAArch64` goes through a W-form instruction, so the upper half of the X alias is always zero. The one-instruction `slw`/`srw` lowering depends on this; if a 64-bit write to a 32-bit register is ever introduced, that lowering breaks.
+- `g_CPUFeatures.arm` carries runtime AArch64 feature bits from `getauxval(AT_HWCAP)`. Use it rather than assuming, and rather than gating on CPU name strings — that mistake is what excluded every Qualcomm core from RPCS3's fast paths.
+- The build uses `-moutline-atomics` so LSE atomics dispatch at runtime. Do not switch to `-march=...+lse` as a default; it `SIGILL`s on pre-ARMv8.1 hardware. An LSE-required build is an opt-in experiment.
+- `texDataHash2` is a within-process change detector, never serialized. The AVX2, NEON, and scalar hash paths in `LatteTexture_CalculateTextureDataHash` already produce different values from each other and that is fine. Keep NEON loads byte-pointer based (`vld1q_u8`); guest texture addresses are not host-aligned.
+
+Known open items from that pass, still unmeasured: the CP idle spin count of 80 in `LatteCommandProcessor.cpp` is a bare x86-tuned constant and should be re-derived from `CNTFRQ_EL0` (RPCS3's equivalent fix was their single largest measured win), and `fctiwz` on ARM64 returns 0 for NaN where Espresso returns `0x80000000` — write a differential test before adding any fixup, since applying a saturation fixup on the wrong architecture is exactly how RPCS3 created a crash bug.
+
 ## Device Install
 
 Use `adb devices` to confirm the AYN Thor is connected, then install the APK:
