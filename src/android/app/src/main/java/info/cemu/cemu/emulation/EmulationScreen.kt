@@ -164,6 +164,14 @@ fun EmulationScreen(
         NativeEmulation.setExternalScreenRotatedLeft(sideMenuState.isExternalScreenRotatedLeft)
     }
 
+    LaunchedEffect(sideMenuState.fastForwardSpeed) {
+        NativeEmulation.setFastForwardSpeed(sideMenuState.fastForwardSpeed)
+    }
+
+    LaunchedEffect(sideMenuState.isFastForwardEnabled) {
+        NativeEmulation.setFastForwardEnabled(sideMenuState.isFastForwardEnabled)
+    }
+
     LaunchedEffect(Unit) {
         HotkeyManager.actions.collect { action ->
             when (action) {
@@ -171,9 +179,12 @@ fun EmulationScreen(
                 HotkeyAction.TOGGLE_MENU -> toggleMenu()
                 HotkeyAction.TOGGLE_FAST_FORWARD -> {
                     val isEnabled = NativeEmulation.toggleFastForward()
+                    // keep the side menu checkbox in sync with the hotkey
+                    viewModel.updateSideMenuState(sideMenuState.copy(isFastForwardEnabled = isEnabled))
                     snackbarHostState.showMessage(
                         scope,
-                        if (isEnabled) tr("Fast forward on") else tr("Fast forward off")
+                        if (isEnabled) tr("Fast forward on (%1x)").replace("%1", sideMenuState.fastForwardSpeed.toString())
+                        else tr("Fast forward off")
                     )
                 }
                 HotkeyAction.SHOW_EMULATED_USB_DEVICES_DIALOG -> showEmulatedUSBDevices = true
@@ -577,6 +588,26 @@ private fun PerformanceMenuContent(
             label = tr("Async shader compile"),
             checked = sideMenuState.isAsyncShaderCompileEnabled,
             onCheckedChange = { updateState(sideMenuState.copy(isAsyncShaderCompileEnabled = it)) },
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+        CheckboxItem(
+            label = tr("Fast forward"),
+            checked = sideMenuState.isFastForwardEnabled,
+            onCheckedChange = { updateState(sideMenuState.copy(isFastForwardEnabled = it)) },
+        )
+
+        Slider(
+            label = tr("Fast forward speed"),
+            value = sideMenuState.fastForwardSpeed,
+            valueFrom = FAST_FORWARD_SPEED_MIN,
+            valueTo = FAST_FORWARD_SPEED_MAX,
+            steps = 1,
+            onValueChange = {
+                updateState(sideMenuState.copy(fastForwardSpeed = normalizeFastForwardSpeed(it)))
+            },
+            labelFormatter = { "${it}x" },
         )
 
         CheckboxItem(
@@ -1091,6 +1122,17 @@ private fun reportAndroidGameState(
         if (isGameplay) GameState.MODE_GAMEPLAY_UNINTERRUPTIBLE else GameState.MODE_NONE
     gameManager.setGameState(GameState(isLoading, mode))
 }
+
+// The guest timer scales in powers of two, so only 2x/4x/8x are representable.
+private const val FAST_FORWARD_SPEED_MIN = 2
+private const val FAST_FORWARD_SPEED_MAX = 8
+
+private fun normalizeFastForwardSpeed(value: Int): Int =
+    when {
+        value <= 3 -> 2
+        value <= 6 -> 4
+        else -> 8
+    }
 
 private const val PAD_RENDER_SCALE_MIN = 50
 private const val PAD_RENDER_SCALE_MAX = 100

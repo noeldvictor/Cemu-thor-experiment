@@ -52,6 +52,15 @@ object NativeEmulation {
     external fun toggleFastForward(): Boolean
 
     @JvmStatic
+    external fun setFastForwardEnabled(enabled: Boolean)
+
+    @JvmStatic
+    external fun isFastForwardEnabled(): Boolean
+
+    @JvmStatic
+    external fun setFastForwardSpeed(multiplier: Int)
+
+    @JvmStatic
     external fun initializeSystems()
 
     @JvmStatic

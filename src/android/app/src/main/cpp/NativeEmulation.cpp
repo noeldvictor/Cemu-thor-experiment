@@ -446,12 +446,45 @@ Java_info_cemu_cemu_nativeinterface_NativeEmulation_resumeTitle([[maybe_unused]]
 	CafeSystem::ResumeTitle();
 }
 
+// The guest timer is scaled as (ticks * 8) >> shift, so shift 3 runs at 1x and each step
+// below that doubles the speed: 2 -> 2x, 1 -> 4x, 0 -> 8x.
+static constexpr uint8 kNormalTimerShift = 3;
+static uint8 sFastForwardShift = 2; // default 2x
+
+static uint8 FastForwardShiftForMultiplier(int multiplier)
+{
+	if (multiplier >= 8)
+		return 0;
+	if (multiplier >= 4)
+		return 1;
+	return 2;
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_setFastForwardSpeed([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jint multiplier)
+{
+	sFastForwardShift = FastForwardShiftForMultiplier(multiplier);
+	// if fast forward is already running, apply the new speed straight away
+	if (ActiveSettings::GetTimerShiftFactor() < kNormalTimerShift)
+		ActiveSettings::SetTimerShiftFactor(sFastForwardShift);
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_isFastForwardEnabled([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
+{
+	return ActiveSettings::GetTimerShiftFactor() < kNormalTimerShift;
+}
+
+extern "C" [[maybe_unused]] JNIEXPORT void JNICALL
+Java_info_cemu_cemu_nativeinterface_NativeEmulation_setFastForwardEnabled([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz, jboolean enabled)
+{
+	ActiveSettings::SetTimerShiftFactor(enabled ? sFastForwardShift : kNormalTimerShift);
+}
+
 extern "C" [[maybe_unused]] JNIEXPORT jboolean JNICALL
 Java_info_cemu_cemu_nativeinterface_NativeEmulation_toggleFastForward([[maybe_unused]] JNIEnv* env, [[maybe_unused]] jclass clazz)
 {
-	constexpr uint8 normalSpeed = 3;
-	constexpr uint8 fastForwardSpeed = 1;
-	const bool enableFastForward = ActiveSettings::GetTimerShiftFactor() >= normalSpeed;
-	ActiveSettings::SetTimerShiftFactor(enableFastForward ? fastForwardSpeed : normalSpeed);
+	const bool enableFastForward = ActiveSettings::GetTimerShiftFactor() >= kNormalTimerShift;
+	ActiveSettings::SetTimerShiftFactor(enableFastForward ? sFastForwardShift : kNormalTimerShift);
 	return enableFastForward;
 }

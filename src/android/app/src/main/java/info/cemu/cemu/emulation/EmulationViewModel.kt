@@ -50,6 +50,8 @@ data class SideMenuState(
     val skipGX2DrawDoneSync: Boolean = false,
     val skipAccurateBarriers: Boolean = false,
     val isGuestProfilerEnabled: Boolean = false,
+    val isFastForwardEnabled: Boolean = false,
+    val fastForwardSpeed: Int = 2,
     val isGamePadAudioEnabled: Boolean = false,
     val gamePadVolume: Int = 0,
 )
