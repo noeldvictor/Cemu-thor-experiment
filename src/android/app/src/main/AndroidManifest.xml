@@ -67,5 +67,12 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+
+        <!-- Allows simpleperf/Perfetto to profile release builds from the shell. This is
+             what release performance work has to be measured against; debug builds are
+             dramatically slower and give a misleading profile. Costs nothing at runtime. -->
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
     </application>
 </manifest>

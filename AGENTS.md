@@ -64,6 +64,44 @@ GX2 has a conservative tracked-register cache for redundant immediate command-bu
 
 Default to correctness and stability. Risky performance toggles must stay off by default, clearly labeled, and preferably session-only from the OSD. Measure changes with Cemu logs, `adb shell dumpsys display`, KGSL counters, and repeatable game scenes before treating them as wins.
 
+## Upstream Cemu Is Worth Mining
+
+`https://github.com/cemu-project/Cemu` is well-written and actively developed, and this
+fork is far enough behind that upstream is a standing source of both fixes and speedups.
+Check it before writing anything non-trivial - the odds are good that a cleaner version
+already exists there.
+
+As of 2026-08-20 upstream `main` was **95 commits ahead** of this branch (2026-04-22 to
+2026-08-18) while `sapphire/android-port` and `ssimco/android-port` had nothing new. Do
+not assume the Android forks are current with upstream; they lag.
+
+A full merge is a project rather than a routine sync. A trial merge produced **23
+conflicts over 205 changed files**, concentrated exactly where this fork's identity lives:
+`VulkanRenderer*` (Android/dual-screen), the emulated controllers (Star Fox gyro work),
+`GameProfile` (the per-game override fields), and four `CMakeLists.txt` plus `vcpkg.json`.
+The build-system churn comes from upstream's SDL2 to SDL3 migration, a vcpkg bump, wxWidgets
+3.3.3 and fmt 12.1 - all of which Android disables or does not care about. Prefer
+**cherry-picking focused series** over merging everything.
+
+Worth taking, in rough value order:
+- The **Latte/Vulkan performance batch** (~15 commits): shader lookup caching whole sets,
+  incremental state update checking, widened fast draw conditions,
+  `VK_EXT_attachment_feedback_loop`, omitting unused `FragCoordScale`, reworked interval
+  tree for the vertex/uniform cache, skipping zero-size readback barriers.
+- `880d2b3b` Vulkan: make `vertexPipelineStoresAndAtomics` optional - may matter on Turnip.
+- Correctness: rare buffer-cache corruption, shader error-state caching, a texture copy
+  edge case, a crash during title shutdown, an input button-mapping race, and
+  `65a37336` ih264d colour inaccuracy **on aarch64**.
+
+Already taken: `3a1d2573` "AArch64: Restore code size after processing jumps".
+
+**Also check open PRs**, not just merged commits - several are directly relevant to this
+fork: `#1909` "Add Android port" (SSimco), `#1992` "Add native Windows ARM64 support",
+`#1759` "Vulkan: Rework inter-renderpass barrier code", `#1650` "various improvements &
+cleanup for shader compilation", `#2007` "Latte: mirror small 1D-tiled render targets back
+to guest memory". Upstream PRs are a preview of what will land and are often directly
+adaptable.
+
 ## ARM64 Reference Manuals
 
 `docs/reference/` holds primary-source vendor documentation so optimization claims can be checked against a manual instead of against folklore. `arm/` has the Arm Architecture Reference Manual (A-profile) plus the software optimization guides for all four core types in the Thor's Snapdragon 8 Gen 2 (1x Cortex-X3, 2x A715, 2x A710, 3x A510), `adreno/` has the Adreno/Qualcomm mobile best-practice text, and `snapdragon/` has the 8 Gen 2 product brief. Each directory has a `README.md` describing what the files are and how to re-fetch them.
@@ -71,6 +109,57 @@ Default to correctness and stability. Risky performance toggles must stay off by
 The PDFs are deliberately **gitignored** (`docs/reference/**/*.pdf`) because the Arm ARM alone is 69 MB and would trip GitHub's large-file warning in a fork that syncs against upstream Cemu. Only the READMEs and notes are tracked, so a fresh clone will have the explanations but not the PDFs.
 
 Use the right manual for the question. The Arm ARM is the architecture: what an instruction is *defined* to do, including exact NaN and saturation behavior — reach for it on correctness questions. The per-core software optimization guides are the microarchitecture: latency, throughput, and which issue pipe — reach for those on performance questions. Neither answers the other's question. `Read` cannot render these PDFs; use pypdf.
+
+## Profiling On Device
+
+The release build carries `<profileable android:shell="true"/>`, so simpleperf works
+against release APKs. Always profile release; debug builds are dramatically slower and
+give a misleading picture.
+
+Hardware PMU events are blocked on this device, and `-p <pid>` is refused. The invocation
+that works is the software clock event with `--app`:
+
+```sh
+adb shell "simpleperf record --app info.cemu.cemu_thor -e cpu-clock -f 1000 --duration 15 -o /data/local/tmp/perf.data"
+adb shell "simpleperf report -i /data/local/tmp/perf.data --sort symbol"
+adb shell "simpleperf report -i /data/local/tmp/perf.data --sort dso,symbol,vaddr_in_file"   # offsets within a symbol
+```
+
+The shipped `.so` is stripped; the unstripped copy is under
+`src/android/app/build/intermediates/cxx/RelWithDebInfo/*/obj/arm64-v8a/`. Many symbols
+still resolve without it. To find which functions call a given libc function, disassembling
+the unstripped `.so` and grouping call sites by enclosing symbol is faster and more reliable
+than call-graph recording:
+
+```sh
+llvm-objdump -d libCemuAndroid.so | awk '/^[0-9a-f]+ <.*>:/ {fn=$2} /clock_gettime/ {print fn}' | sort | uniq -c | sort -rn
+```
+
+**Do not trust FPS as a performance metric for CPU work.** The scenes reachable without
+playing are vsync-capped at 60, and whole-process CPU time is diluted by spinning
+Latte/IOSU threads - a 3 instruction to 2 improvement in the recompiler's load path
+measured as 7922 vs 7897 ticks, i.e. noise. Per-symbol profiles are the sensitive
+instrument. `OSSched[core=1]` is the guest main thread and the one that matters; it burns
+roughly 4x the CPU of cores 0 and 2.
+
+### Open: half of the guest main thread is in the vdso clock read
+
+Profiling Star Fox Zero on 2026-08-20 put **23% of all emulator CPU** (and **48% of
+`OSSched[core=1]`**) in `__kernel_clock_gettime`, with 99.8% of those samples on that one
+thread. Samples cluster tightly at vdso offset `0x30c`, which is the `isb`+`mrs CNTVCT_EL0`
+sequence - real code at an extreme call rate, not misattribution.
+
+**The caller is not yet identified.** The vdso has no frame pointers and DWARF cannot unwind
+through it. Disassembling the binary shows the only `clock_gettime` call sites are
+`LatteOverlay_RenderNotifications`, `LattePerformanceMonitor_frameEnd`, `fileCache_test`,
+`LatteCP_*`, `nsysnetExport_select`, `mic_updateOnAXFrame`, curl and libusb - none of which
+should be hot on a guest scheduler thread. `coreinit::OSGetTime()` was ruled out by
+disassembly: it compiles to `mrs CNTVCT_EL0` directly, no libc call.
+
+Next step is to interpose or count rather than sample - e.g. a temporary counter around
+suspected call sites, or bisecting by disabling the FPS overlay, the performance monitor,
+and the mic/AX path in turn. Worth chasing: it is by far the largest single item in the
+profile.
 
 ## ARM64 Performance Work Derived From RPCS3
 
