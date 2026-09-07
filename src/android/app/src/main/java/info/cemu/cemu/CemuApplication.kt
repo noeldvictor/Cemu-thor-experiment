@@ -43,6 +43,10 @@ class CemuApplication : Application() {
 
         NativeFiles.initialize(contentResolver)
 
+        // Resolve the data root before anything reads cemuUserFolder (saveDataFiles does).
+        cemuUserFolder = runBlocking { CemuDataStorage.prepareActiveRoot(this@CemuApplication) }
+        CemuDataStorage.setActiveRoot(cemuUserFolder)
+
         initializeTranslations()
 
         saveDataFiles()
@@ -158,9 +162,6 @@ class CemuApplication : Application() {
     }
 
     private fun initializeCemu() {
-        cemuUserFolder = runBlocking { CemuDataStorage.prepareActiveRoot(this@CemuApplication) }
-        CemuDataStorage.setActiveRoot(cemuUserFolder)
-
         val displayMetrics = resources.displayMetrics
         setDPI(displayMetrics.density)
         initializeActiveSettings(
