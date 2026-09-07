@@ -26,19 +26,20 @@ object DisplayUtils {
         val internalId = internalDisplay?.displayId ?: launchDisplayId
         return displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
             .firstOrNull { display ->
-                display.displayId != internalId && display.isUsableExternalDisplay(internalDisplay)
+                display.displayId != internalId && display.isUsableExternalDisplay()
             }
     }
 
-    private fun Display.isUsableExternalDisplay(internalDisplay: Display?): Boolean {
+    private fun Display.isUsableExternalDisplay(): Boolean {
         val hasPresentationFlag = (flags and Display.FLAG_PRESENTATION) == Display.FLAG_PRESENTATION
         val isPrivateDisplay = (flags and Display.FLAG_PRIVATE) == Display.FLAG_PRIVATE
         val hasUsableMode = mode.physicalWidth > 0 && mode.physicalHeight > 0
-        val hasDifferentName = internalDisplay == null || name != internalDisplay.name
+        // No name comparison: the caller already excludes the internal display by id, and AOSP
+        // gives every TYPE_INTERNAL panel the same built-in name, which would reject a second
+        // internal panel. (The AYN Thor names its panels differently; do not rely on that.)
         return isValid &&
             state == Display.STATE_ON &&
             !isPrivateDisplay &&
-            hasDifferentName &&
             hasPresentationFlag &&
             hasUsableMode
     }
