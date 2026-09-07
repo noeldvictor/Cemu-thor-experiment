@@ -612,7 +612,7 @@ namespace snd_user
 				channel->tv_volume[0][2].volume_target = __MIXTranslateVolume(fader + chan5);
 				channel->tv_volume[0][3].volume_target = __MIXTranslateVolume(fader + chan3 + chan5);
 				channel->tv_volume[0][4].volume_target = 0;
-				channel->tv_volume[0][0].volume_target = 0;
+				channel->tv_volume[0][5].volume_target = 0;
 
 				for (int i = 0; i < 2; ++i)
 				{
@@ -622,8 +622,8 @@ namespace snd_user
 					channel->tv_volume[1 + i][1].volume_target = __MIXTranslateVolume(base + chan4 + chan1);
 					channel->tv_volume[1 + i][2].volume_target = __MIXTranslateVolume(base + chan5 + chan2);
 					channel->tv_volume[1 + i][3].volume_target = __MIXTranslateVolume(base + chan5 + chan3);
-					channel->tv_volume[1 + i][0].volume_target = 0;
 					channel->tv_volume[1 + i][4].volume_target = 0;
+					channel->tv_volume[1 + i][5].volume_target = 0;
 				}
 
 				channel->tv_mode &= ~AX_UPDATE_MODE_40000000_VOLUME;
@@ -655,8 +655,7 @@ namespace snd_user
 					channel->tv_volume[1 + i][4].volume_target = __MIXTranslateVolume(base + chan4);
 					channel->tv_volume[1 + i][2].volume_target = __MIXTranslateVolume(base + chan2);
 					channel->tv_volume[1 + i][3].volume_target = __MIXTranslateVolume(base + chan3);
-
-					channel->tv_volume[0][5].volume_target = __MIXTranslateVolume(base + lfe);
+					channel->tv_volume[1 + i][5].volume_target = __MIXTranslateVolume(base + lfe);
 				}
 
 				channel->tv_mode &= ~AX_UPDATE_MODE_40000000_VOLUME;
