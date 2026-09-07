@@ -567,7 +567,7 @@ void LatteSHRC_UpdateVSBaseHash(uint8* vertexShaderPtr, uint32 vertexShaderSize,
 	_shaderBaseHash_vs = vsHash;
 }
 
-void LatteSHRC_UpdateGSBaseHash(uint8* geometryShaderPtr, uint32 geometryShaderSize, uint8* geometryCopyShader, uint32 geometryCopyShaderSize)
+void LatteSHRC_UpdateGSBaseHash(uint8* geometryShaderPtr, uint32 geometryShaderSize, uint8* geometryCopyShader, uint32 geometryCopyShaderSize, LatteDecompilerShader* vertexShader)
 {
 	// update hash from geometry shader data
 	uint64 gsHash1 = 0;
@@ -575,7 +575,10 @@ void LatteSHRC_UpdateGSBaseHash(uint8* geometryShaderPtr, uint32 geometryShaderS
 	_calculateShaderProgramHash((uint32*)geometryShaderPtr, geometryShaderSize, &hashCacheGS, &gsHash1, &gsHash2);
 	// get geometry shader
 	uint64 gsHash = gsHash1 + gsHash2;
-	gsHash += (uint64)_activeVertexShader->ringParameterCount;
+	// use the vertex shader resolved for this draw, not _activeVertexShader: since the shader set
+	// cache rewrite the global is only updated after the set is built, so here it still names the
+	// previous draw's vertex shader (and is null on the first geometry shader draw)
+	gsHash += (uint64)vertexShader->ringParameterCount;
 	gsHash += (LatteGPUState.contextRegister[mmVGT_STRMOUT_EN] ? 21 : 0);
 	_shaderBaseHash_gs = gsHash;
 }
@@ -943,12 +946,12 @@ LatteDecompilerShader* LatteSHRC_GetOrCreateVertexShader(uint8* vertexShaderPtr,
 
 LatteDecompilerShader* LatteSHRC_GetOrCreateGeometryShader(bool usesGeometryShader, uint8* geometryShaderPtr, uint32 geometryShaderSize, uint8* geometryCopyShader, uint32 geometryCopyShaderSize, LatteDecompilerShader* vertexShader)
 {
-	if (!usesGeometryShader || !_activeVertexShader)
+	if (!usesGeometryShader || !vertexShader)
 	{
 		_shaderBaseHash_gs = 0;
 		return nullptr;
 	}
-	LatteSHRC_UpdateGSBaseHash(geometryShaderPtr, geometryShaderSize, geometryCopyShader, geometryCopyShaderSize);
+	LatteSHRC_UpdateGSBaseHash(geometryShaderPtr, geometryShaderSize, geometryCopyShader, geometryCopyShaderSize, vertexShader);
 	auto itBaseShader = sGeometryShaders.find(_shaderBaseHash_gs);
 	LatteDecompilerShader* geometryShader;
 	if (itBaseShader != sGeometryShaders.end())
@@ -1327,4 +1330,9 @@ void LatteSHRC_UnloadAll()
 	cemu_assert_debug(s_shaderStateCache.empty());
 	s_shaderStateCacheKeys.clear();
 	s_shaderStateCacheCleanupIndex = 0;
+	// the active shader pointers now dangle; a second title in the same process must not see them
+	_activeFetchShader = nullptr;
+	_activeVertexShader = nullptr;
+	_activePixelShader = nullptr;
+	_activeGeometryShader = nullptr;
 }
