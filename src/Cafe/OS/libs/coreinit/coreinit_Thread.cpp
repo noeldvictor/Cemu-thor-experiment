@@ -1492,6 +1492,11 @@ namespace coreinit
 	}
 
 	// starts PPC core emulation
+	bool OSIsSchedulerActive()
+	{
+		return sSchedulerActive.load(std::memory_order::relaxed);
+	}
+
 	void OSSchedulerBegin(sint32 numCPUEmulationThreads)
 	{
 		std::unique_lock _lock(sSchedulerStateMtx);
