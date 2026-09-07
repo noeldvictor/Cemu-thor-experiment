@@ -14,6 +14,7 @@ import android.webkit.MimeTypeMap
 import info.cemu.cemu.BuildConfig
 import info.cemu.cemu.R
 import info.cemu.cemu.common.android.context.internalFolder
+import info.cemu.cemu.common.storage.CemuDataStorage
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
@@ -22,9 +23,10 @@ import java.io.IOException
 import java.util.Objects
 
 class DocumentsProvider : DocumentsProvider() {
-    private val baseDirectory: File by lazy {
-        requireContext().internalFolder()
-    }
+    // Follow the root CemuDataStorage selected at startup, so the exported tree, the shared log
+    // and the "open Cemu folder" action match what the emulator is actually using.
+    private val baseDirectory: File
+        get() = CemuDataStorage.getActiveRoot() ?: requireContext().internalFolder()
 
     private val applicationName: String by lazy {
         var context = requireContext().applicationContext
