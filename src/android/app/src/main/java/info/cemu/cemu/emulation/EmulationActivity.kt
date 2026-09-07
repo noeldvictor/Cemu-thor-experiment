@@ -127,7 +127,12 @@ class EmulationActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        EmulationSessionState.onSessionStarted(this)
+        // A recreate for a configuration change (uiMode, locale, density, keyboard) keeps the
+        // native title running in this process, so it must not count as a new session or the
+        // save sync in onDestroy would run mid-title on the UI thread and unbalance the count.
+        if (savedInstanceState == null || !EmulationSessionState.isEmulationRunning) {
+            EmulationSessionState.onSessionStarted(this)
+        }
         DisplayUtils.init(this)
 
         inputManager = InputDelegateManager(this)
@@ -168,7 +173,9 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        EmulationSessionState.onSessionStopped(this)
+        if (!isChangingConfigurations) {
+            EmulationSessionState.onSessionStopped(this)
+        }
         super.onDestroy()
     }
 
