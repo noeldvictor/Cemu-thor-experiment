@@ -211,6 +211,15 @@ If a measurement looks odd, check whether someone is holding the device: an inte
 session will open the side menu or change scenes underneath a capture and quietly invalidate
 an A/B.
 
+Two more traps seen on 2026-09-07. First, never create or copy files into
+`/sdcard/Android/data/info.cemu.cemu_thor/files` from `adb shell` or `adb push`: the FUSE layer
+records them as owned by `shell`, and the app can read but not truncate them. A shell-owned
+`log.txt` silently stops Cemu from writing its log (the run looks like it never initialised),
+so if `log.txt` stops updating, `ls -la` the directory and delete the shell-owned copy. Second,
+`am start` does not wake a sleeping display; a screencap of a launched title can come back
+black while the guest is running. Check `dumpsys power | grep mWakefulness` before reading
+anything into a black capture.
+
 ## No LLVM Recompiler Backend
 
 Decided against porting an RPCS3-style LLVM JIT backend (2026-08-20). Recording the reasons
