@@ -199,6 +199,14 @@ uint32 LatteCP_readU32Deprc()
 		// still no command data available, do some other tasks
 		LatteTiming_HandleTimedVsync();
 		LatteAsyncCommands_checkAndExecute();
+		// Publish finished occlusion query results now rather than at the next vsync or the
+		// 8th query begin: games that poll a CPU query within the frame (ZombiU) otherwise see
+		// "not ready" from a GPU that has already caught up, and GX2QueryGetOcclusionResult
+		// then falls back to a full GX2DrawDone stall on the guest main thread. The update
+		// polls command buffer fences, so do it every few idle iterations rather than every one.
+		static uint32 s_idleQueryPollCounter = 0;
+		if ((++s_idleQueryPollCounter & 7) == 0)
+			LatteQuery_UpdateFinishedQueries();
 		std::this_thread::yield();
 		performanceMonitor.gpuTime_idleTime.endMeasuring();
 	}

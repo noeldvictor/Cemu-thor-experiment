@@ -5,6 +5,7 @@
 #include "Cafe/CafeSystem.h"
 #include "GX2_Query.h"
 #include "GX2_Command.h"
+#include "GX2_Event.h"
 
 #define LATTE_GC_NUM_RB							2
 #define _QUERY_REG_COUNT						8 // each reg/result is 64bits, little endian
@@ -33,12 +34,11 @@ namespace GX2
 	{
 		if (GX2GetDisplayListWriteStatus())
 			return; // can't submit commands while a display list is being recorded
-		GX2ReserveCmdSpace(2);
-		gx2WriteGather_submitU32AsBE(pm4HeaderType3(IT_HLE_SYNC_ASYNC_OPERATIONS, 1));
-		gx2WriteGather_submitU32AsBE(0x00000000); // unused
-		GX2Command_Flush(0x100, true);
-		uint64 ts = GX2GetLastSubmittedTimeStamp();
-		GX2WaitTimeStamp(ts);
+		// GX2DrawDone already emits the async-operation sync (always on Vulkan), flushes and
+		// waits for the last submitted timestamp; that is exactly the wait needed here.
+		// This is the expensive fallback: the Latte thread also drains finished queries
+		// whenever it goes idle, so a caught-up GPU normally publishes the result without it.
+		GX2DrawDone();
 	}
 
 	void _BeginOcclusionQuery(GX2Query* queryInfo, bool isGPUQuery)
