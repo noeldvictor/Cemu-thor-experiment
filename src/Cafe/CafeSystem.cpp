@@ -1211,12 +1211,20 @@ namespace CafeSystem
 
 	void RequestRecreateCanvas()
 	{
-		s_implementation->CafeRecreateCanvas();
+		if (s_implementation)
+			s_implementation->CafeRecreateCanvas();
 	}
 
 	void NotifyPPCProcessExit(sint32 status)
 	{
 		s_foregroundReturnStatus = status;
+		// The Android build never installs a SystemImplementation (only the wx MainWindow does),
+		// so a guest exit() used to dereference nullptr here on a detached host thread.
+		if (!s_implementation)
+		{
+			cemuLog_log(LogType::Force, "Title exited with status {} but no system implementation is installed to handle it", status);
+			return;
+		}
 		s_implementation->CafePPCProcessExit();
 	}
 
