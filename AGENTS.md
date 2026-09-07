@@ -260,6 +260,30 @@ detect a codegen change.
 Reproduce with a script that force-stops, launches, waits ~8s, samples `/proc/<pid>/stat`,
 waits 20s, samples again, and also reads the Init/Run title timestamps out of `log.txt`.
 
+### 2026-09-07: inline LSE build, and a caveat about today's noise
+
+A/B of `b9e2d60f` (upstream sync, `-moutline-atomics`) against `a70876bd` (same source plus
+the 8 Gen 2 flags), nine runs each in three alternating rounds, same protocol:
+
+| | ticks over 20 s of loading (per round) | median |
+|---|---|---|
+| outline atomics | 2789 / 2863 / 2988, 2757 / 2874 / 2799, 1651 / 2600 / 2518 | 2789 |
+| inline LSE (8 Gen 2 flags) | 2936 / 2426 / 2937, 2544 / 2527 / 2527, 2524 / 2512 / 2120 | 2527 |
+
+The median says about 9% less CPU, and six of the nine inline-LSE runs sit in a tight
+2512-2544 band, but the ranges overlap: the first inline-LSE round right after install
+measured at the baseline level, and both builds threw one low outlier late in the session.
+Today's spread (up to 7% within a round) is far wider than the 1.5% seen on 2026-08-21, so
+treat this as *likely* rather than confirmed and re-measure on a quiet device before quoting
+it. Two things to watch for when repeating: a run whose Init-to-Run-title time is not
+~0.85 s has shifted the 20 s window and is not comparable, and the first runs after an
+`adb install` can carry ART compilation work in the same process.
+
+Startup was unchanged at 0.84-0.91 s. Both builds also measured higher than the 2026-08-21
+figures for `af59bf4e` (2489-2549); whether the upstream sync costs loading-phase CPU or the
+device was simply in a different state has not been separated, and needs a `148ccee7` build
+run through the same protocol on the same day.
+
 ## Profiling On Device
 
 The release build carries `<profileable android:shell="true"/>`, so simpleperf works
@@ -366,7 +390,7 @@ Invariants established by that work, worth not breaking:
 - On AArch64 `__rdtsc()` is `CNTVCT_EL0`, and its rate is exposed exactly in `CNTFRQ_EL0` (typically 19200000 on Qualcomm). Do not reintroduce frequency calibration by measurement on ARM; it costs 3 seconds of startup to approximate a number the hardware states exactly.
 - Every write to a 32-bit IML GPR in `BackendAArch64` goes through a W-form instruction, so the upper half of the X alias is always zero. The one-instruction `slw`/`srw` lowering depends on this; if a 64-bit write to a 32-bit register is ever introduced, that lowering breaks.
 - `g_CPUFeatures.arm` carries runtime AArch64 feature bits from `getauxval(AT_HWCAP)`. Use it rather than assuming, and rather than gating on CPU name strings — that mistake is what excluded every Qualcomm core from RPCS3's fast paths.
-- The build uses `-moutline-atomics` so LSE atomics dispatch at runtime. Do not switch to `-march=...+lse` as a default; it `SIGILL`s on pre-ARMv8.1 hardware. An LSE-required build is an opt-in experiment.
+- Since 2026-09-07 the Android build compiles Cemu's own code for Snapdragon 8 Gen 2 class hardware (`CEMU_AARCH64_ASSUME_SNAPDRAGON_8GEN2`, default ON for Android: `-march=armv8.2-a+lse+dotprod+fp16+rcpc -mtune=cortex-a710`), so LSE atomics are inline and the release APK requires ARMv8.2. This was an explicit "aggressive defaults" decision for a Thor-only fork. Non-Android builds keep `-moutline-atomics`. Never use `-mcpu=cortex-a710`/`x3`: they imply SVE2, which the 8 Gen 2 does not have. vcpkg-built dependencies and libc++ are not covered by the flag and still contain outline-atomic calls.
 - `texDataHash2` is a within-process change detector, never serialized. The AVX2, NEON, and scalar hash paths in `LatteTexture_CalculateTextureDataHash` already produce different values from each other and that is fine. Keep NEON loads byte-pointer based (`vld1q_u8`); guest texture addresses are not host-aligned.
 
 Known open items from that pass, still unmeasured: the CP idle spin count of 80 in `LatteCommandProcessor.cpp` is a bare x86-tuned constant and should be re-derived from `CNTFRQ_EL0` (RPCS3's equivalent fix was their single largest measured win), and `fctiwz` on ARM64 returns 0 for NaN where Espresso returns `0x80000000` — write a differential test before adding any fixup, since applying a saturation fixup on the wrong architecture is exactly how RPCS3 created a crash bug.

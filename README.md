@@ -19,7 +19,7 @@ game assets.
 | | |
 |---|---|
 | Target device | AYN Thor Base / Pro / Max (Snapdragon 8 Gen 2, Adreno 740). Thor Lite is not a target. |
-| Platform | Android, ARM64 only, Vulkan only |
+| Platform | Android, ARM64 only (ARMv8.2 with LSE atomics required), Vulkan only |
 | Package id | `info.cemu.cemu_thor` (release), `info.cemu.cemu_thor.debug` (debug) |
 | Branch | `android-port` is the main branch of this fork |
 | Upstream base | Tracks upstream Cemu by selective cherry-pick, not full merges; last sync 2026-09-07 |
