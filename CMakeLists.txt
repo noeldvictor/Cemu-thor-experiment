@@ -264,15 +264,32 @@ if(CEMU_ARCHITECTURE MATCHES "(aarch64)|(AARCH64)|(arm64)|(ARM64)")
 	# and LL/SC also livelocks harder under contention, which is exactly the
 	# multi-core guest case.
 	#
-	# -moutline-atomics keeps the binary running on pre-ARMv8.1 devices by dispatching
-	# at runtime, so it is safe as the default. Building with -march=...+lse directly
-	# would be faster still but SIGILLs on hardware without LSE; if that is ever
-	# wanted it should be an explicit opt-in build, not the default.
+	# Two ways to get LSE. -moutline-atomics keeps the binary running on pre-ARMv8.1
+	# devices by dispatching at runtime and is the safe default for a general build.
+	# CEMU_AARCH64_ASSUME_SNAPDRAGON_8GEN2 instead compiles for the hardware this fork
+	# targets: armv8.2-a plus the extensions the AYN Thor reports in AT_HWCAP (LSE
+	# atomics, dot product, fp16, RCpc), tuned for the Cortex-A710/A715 mid cores.
+	# That binary will SIGILL on older ARM64 devices, which is accepted for the
+	# Android build of this Thor-only fork (decision recorded in AGENTS.md).
+	#
+	# Never use -mcpu=cortex-a710/x3 here: those imply +sve2, and Qualcomm shipped the
+	# 8 Gen 2 without SVE, so auto-vectorised SVE code would fault on the device.
+	if(ANDROID)
+		set(CEMU_AARCH64_ASSUME_SNAPDRAGON_8GEN2_DEFAULT ON)
+	else()
+		set(CEMU_AARCH64_ASSUME_SNAPDRAGON_8GEN2_DEFAULT OFF)
+	endif()
+	option(CEMU_AARCH64_ASSUME_SNAPDRAGON_8GEN2 "Compile for Snapdragon 8 Gen 2 class hardware (armv8.2-a+lse+dotprod+fp16+rcpc); the binary will not run on older ARM64 devices" ${CEMU_AARCH64_ASSUME_SNAPDRAGON_8GEN2_DEFAULT})
 	if(NOT MSVC)
 		include(CheckCXXCompilerFlag)
-		check_cxx_compiler_flag("-moutline-atomics" CEMU_HAS_OUTLINE_ATOMICS)
-		if(CEMU_HAS_OUTLINE_ATOMICS)
-			add_compile_options("-moutline-atomics")
+		if(CEMU_AARCH64_ASSUME_SNAPDRAGON_8GEN2)
+			add_compile_options("-march=armv8.2-a+lse+dotprod+fp16+rcpc" "-mtune=cortex-a710")
+			message(STATUS "AArch64: assuming Snapdragon 8 Gen 2 class hardware (LSE atomics inline)")
+		else()
+			check_cxx_compiler_flag("-moutline-atomics" CEMU_HAS_OUTLINE_ATOMICS)
+			if(CEMU_HAS_OUTLINE_ATOMICS)
+				add_compile_options("-moutline-atomics")
+			endif()
 		endif()
 	endif()
 endif()
