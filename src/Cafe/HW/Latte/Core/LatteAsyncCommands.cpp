@@ -107,9 +107,19 @@ void LatteAsyncCommand_queueTextureCopy(const LatteSurfaceCopyParam& src, const 
 
 void LatteAsyncCommands_waitUntilAllProcessed()
 {
+	// Only the Latte thread drains this queue. If it is blocked (on Android: waiting for a new
+	// surface after VK_ERROR_SURFACE_LOST_KHR while the activity is backgrounded) or shutting
+	// down, an unbounded pause loop pins a host core, so back off to the scheduler after a
+	// short spin and stop waiting once the GPU thread is gone.
+	uint32 spins = 0;
 	while (LatteAsyncCommandQueue.empty() == false)
 	{
-		_mm_pause();
+		if (Latte_GetStopSignal())
+			return;
+		if (++spins < 64)
+			_mm_pause();
+		else
+			std::this_thread::yield();
 	}
 }
 
