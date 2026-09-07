@@ -82,9 +82,9 @@ class CemuApplication : Application() {
         }
 
         val builtinGraphicPacksFolder =
-            File(internalCemuUserFolder).resolve("graphicPacks/cemuThorBuiltin")
+            cemuUserFolder.resolve("graphicPacks/cemuThorBuiltin")
         val builtinStarFoxControllerProfile =
-            File(internalCemuUserFolder).resolve(
+            cemuUserFolder.resolve(
                 "controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml"
             )
 
@@ -130,7 +130,7 @@ class CemuApplication : Application() {
                     assetFile.startsWith("graphicPacks/cemuThorBuiltin/") ||
                     assetFile == "controllerProfiles/CemuThor_StarFoxZero_StarFox64ish.xml"
                 ) {
-                    File(internalCemuUserFolder).resolve(assetFile)
+                    cemuUserFolder.resolve(assetFile)
                 } else {
                     dataFolder.resolve(assetFile)
                 }
