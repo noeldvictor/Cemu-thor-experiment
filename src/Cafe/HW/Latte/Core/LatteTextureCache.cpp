@@ -100,7 +100,12 @@ static uint32 LatteTC_StridedRotateHash(const uint8* data, uint32 sampleCount, u
 }
 
 // sample few uint64s uniformly over memory range
-uint32 _quickStochasticHash(void* texData, uint32 memRange)
+//
+// BC2/BC3 store each 4x4 block as 8 bytes of alpha followed by 8 bytes of colour. With an
+// even sample stride the 8-byte samples land on the same half of every block, so an opaque
+// texture whose colour data changes can hash identically (upstream PR #2051, streamed
+// textures in Skylanders). For those formats sample both halves of the 16-byte block.
+uint32 _quickStochasticHash(void* texData, uint32 memRange, bool is16ByteBlockFormat)
 {
 	auto* texDataU8 = static_cast<uint8*>(texData);
 
@@ -108,11 +113,23 @@ uint32 _quickStochasticHash(void* texData, uint32 memRange)
 	memRange /= sizeof(uint64);
 
 	uint32 memStep = memRange / 37; // use prime here to avoid memStep aligning nicely with pitch of texture, leading to sampling only along the border of a texture
-	for (sint32 i = 0; i < 37; i++)
+	if (!is16ByteBlockFormat)
 	{
-		hashVal += LatteTC_ReadUnaligned<uint64>(texDataU8);
-		hashVal = (hashVal << 3) | (hashVal >> 61);
-		texDataU8 += memStep * sizeof(uint64);
+		for (sint32 i = 0; i < 37; i++)
+		{
+			hashVal += LatteTC_ReadUnaligned<uint64>(texDataU8);
+			hashVal = (hashVal << 3) | (hashVal >> 61);
+			texDataU8 += memStep * sizeof(uint64);
+		}
+	}
+	else
+	{
+		for (sint32 i = 0; i < 37; i++)
+		{
+			hashVal += LatteTC_ReadUnaligned<uint64>(texDataU8) ^ LatteTC_ReadUnaligned<uint64>(texDataU8 + sizeof(uint64));
+			hashVal = (hashVal << 3) | (hashVal >> 61);
+			texDataU8 += memStep * sizeof(uint64);
+		}
 	}
 	return (uint32)hashVal ^ (uint32)(hashVal >> 32);
 }
@@ -165,7 +182,11 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 		}
 		else
 		{
-			hashVal = _quickStochasticHash(texDataU8, memRange);
+			const bool is16ByteBlockFormat = hostTexture->format == Latte::E_GX2SURFFMT::BC2_UNORM ||
+				hostTexture->format == Latte::E_GX2SURFFMT::BC2_SRGB ||
+				hostTexture->format == Latte::E_GX2SURFFMT::BC3_UNORM ||
+				hostTexture->format == Latte::E_GX2SURFFMT::BC3_SRGB;
+			hashVal = _quickStochasticHash(texDataU8, memRange, is16ByteBlockFormat);
 		}
 		return hashVal;
 	}
@@ -305,7 +326,7 @@ bool LatteTC_HasTextureChanged(LatteTexture* hostTexture, bool force)
 		return false;
 	hostTexture->lastDataUpdateFrameCounter = LatteGPUState.frameCounter;
 	// we assume that certain texture properties indicate that the texture will never be written by the CPU
-	if (hostTexture->width == 1280 && hostTexture->format != Latte::E_GX2SURFFMT::R8_UNORM && force == false)
+	if (hostTexture->width == 1280 && hostTexture->format != Latte::E_GX2SURFFMT::R8_UNORM && hostTexture->format != Latte::E_GX2SURFFMT::BC3_UNORM && force == false)
 	{
 		// todo - remove this or find a better way to handle excluded texture invalidation checks (maybe via game profile?)
 		return false;
