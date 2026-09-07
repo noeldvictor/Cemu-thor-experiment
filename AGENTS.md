@@ -52,6 +52,10 @@ The build machine runs close to full (93% used, about 69 GB free on `C:` on 2026
 the Thor's internal storage was at 97%. Be mindful of disk usage and clean up after yourself;
 a session that leaves a trial worktree with a full native build behind costs gigabytes.
 
+**Cleanup is limited to this repository directory.** Shared caches under the user profile
+(`~/.gradle`, `%LOCALAPPDATA%cpkg`, other projects' Claude temp directories) serve other
+projects on the machine; list them in a report if they are large, but do not delete them.
+
 Where the space goes, measured 2026-09-07:
 
 | path | size | keep? |
