@@ -185,7 +185,9 @@ uint32 LatteTexture_CalculateTextureDataHash(LatteTexture* hostTexture)
 			const bool is16ByteBlockFormat = hostTexture->format == Latte::E_GX2SURFFMT::BC2_UNORM ||
 				hostTexture->format == Latte::E_GX2SURFFMT::BC2_SRGB ||
 				hostTexture->format == Latte::E_GX2SURFFMT::BC3_UNORM ||
-				hostTexture->format == Latte::E_GX2SURFFMT::BC3_SRGB;
+				hostTexture->format == Latte::E_GX2SURFFMT::BC3_SRGB ||
+				hostTexture->format == Latte::E_GX2SURFFMT::BC5_UNORM || // two independent 8-byte channel blocks
+				hostTexture->format == Latte::E_GX2SURFFMT::BC5_SNORM;
 			hashVal = _quickStochasticHash(texDataU8, memRange, is16ByteBlockFormat);
 		}
 		return hashVal;
