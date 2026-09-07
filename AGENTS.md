@@ -405,6 +405,11 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 Use release builds for performance testing. Debug builds can be dramatically slower on Star Fox Zero because native code is unoptimized and debug-only logs/assertions are active. The default release artifact is `src/android/app/build/outputs/apk/release/app-release.apk`.
 
+The `Init Cemu <hash>` line in `log.txt` and the OSD version come from `EMULATOR_HASH`, which
+CMake captures at *configure* time, so after source-only changes the logged hash lags the real
+`HEAD` until something triggers a reconfigure. The Gradle `versionName` (visible in
+`dumpsys package`) is computed at every build and is the reliable one.
+
 It is also useful to push a copy to the device:
 
 ```sh
