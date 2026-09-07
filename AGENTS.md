@@ -148,10 +148,12 @@ markers since before this pass; it is not built on Android and was left alone.
 
 ### Open upstream PRs worth watching (2026-09-07)
 
-- `#2057` Latte: fix cubemap destination textures in surface copies - a follow-up bug fix to
-  the GX2CopySurface rework this branch now carries. Small; take it when it lands or sooner.
-- `#2051` 16-byte reads in `_quickStochasticHash` so BC2/BC3 RGB changes are detected.
-- `#2047` GX2: sync with the GPU when polling a pending CPU occlusion query (ZombiU).
+- Already taken on 2026-09-07 while still open upstream: `#2057` (cubemap destination
+  textures in surface copies, a follow-up to the GX2CopySurface rework), `#2051` (16-byte
+  samples in `_quickStochasticHash` so BC2/BC3 colour changes are detected; ported onto the
+  fork's rewritten hash) and `#2047` (GX2: sync with the GPU when polling a pending CPU
+  occlusion query). If upstream merges them in a different shape, reconcile rather than
+  re-pick.
 - `#2048` FSC: sort merged directory listings by name (ZombiU v32 black screen).
 - `#2007` Latte: mirror small 1D-tiled render targets back to guest memory.
 - `#1759` Vulkan: rework inter-renderpass barrier code (draft, stale since April) and
