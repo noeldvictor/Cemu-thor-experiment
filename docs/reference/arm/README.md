@@ -21,9 +21,9 @@ needed, re-run that rather than hunting mirrors.
 
 **Use the right one.** The Arm ARM (66MB, 11.5k pages) is the ARCHITECTURE: what an
 instruction is *defined* to do - exact semantics, flag effects, NaN handling,
-memory-ordering rules. Reach for it on correctness questions (e.g. "does ARM
-`FMAX` propagate NaN the way PPC `vmaxfp` does?" - see the FixupVmxMaxMinNan note
-in CLAUDE.md, which is exactly this kind of question and is still open).
+memory-ordering rules. Reach for it on correctness questions (e.g. "what does
+`FCVTZS` return for NaN, and does that match Espresso `fctiwz`?" - see the open
+`fctiwz`/`psq_st` NaN items in AGENTS.md, which are exactly this kind of question).
 The SWOGs are the MICROARCHITECTURE: how fast it is on *these* cores - latency,
 throughput, which issue pipe. Reach for those on performance questions. Neither
 answers the other's question.
@@ -34,7 +34,7 @@ The 8 Gen 2 is 1x X3 + 2x A715 + 2x A710 + 3x A510.
 checking its Table 2-1 confirms that for the pipeline layout - Load/Store 0/1 plus
 a load-only Load 2 (3 load pipes), Integer Single-Cycle 0/1 plus Single/Multi 0/1
 (4 integer pipes), and FP/ASIMD 0/1 (2 vector pipes, which on the A715 also serve
-as Vector Store data). So the mid-core model in CLAUDE.md holds for both. Per
+as Vector Store data). So one mid-core pipeline model holds for both. Per
 instruction latencies may still differ - quote each guide for its own core.
 
 ## What they are good for
@@ -61,9 +61,14 @@ print(r.pages[13].extract_text())   # 0-indexed; page 14 = Table 2-1
 
 ## Why this landed
 
-CLAUDE.md carried "mid-cores have 3x 128-bit load ports but only 2x arithmetic
-ports" as the basis of the whole ARM64 optimisation model. Checking it against
-Table 2-1 confirmed the 3 load pipes and corrected the rest: the 2 is FP/ASIMD on
-the A710, while integer ALU is 4 wide there and 6 wide on the X3. That flipped
-"spend loads, save arithmetic" from a general rule into a vector-only one - see
-the hardware model section of CLAUDE.md.
+An earlier working assumption was "mid-cores have 3x 128-bit load ports but only
+2x arithmetic ports", used as the basis of the ARM64 optimisation model. Checking
+it against Table 2-1 confirmed the 3 load pipes and corrected the rest: the 2 is
+FP/ASIMD on the A710, while integer ALU is 4 wide there and 6 wide on the X3. That
+flipped "spend loads, save arithmetic" from a general rule into a vector-only one.
+For the scalar-heavy Espresso recompiler output the integer pipes are wide; the
+constraint is the FP/ASIMD pair, which only paired-single and NEON code hits.
+
+Section 4.11 of the X3 and A715 guides lists the fused pairs: `CMP`/`CMN`/`TST`
+followed by `B.cond`, plus the AES pairs. The recompiler's flags-based branch
+fusion and redundant-compare elimination exist because of that table.

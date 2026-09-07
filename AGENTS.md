@@ -46,6 +46,35 @@ Android is Vulkan-only in this branch: `src/android/app/build.gradle.kts` passes
 
 On Windows, prefer building from a path without spaces if native dependency builds start failing; vcpkg/autotools packages can be sensitive to physical build paths with spaces. The Android Gradle build has also succeeded from the current checkout path, so do not move the repo just for housekeeping.
 
+## Disk Usage
+
+The build machine runs close to full (93% used, about 69 GB free on `C:` on 2026-09-07) and
+the Thor's internal storage was at 97%. Be mindful of disk usage and clean up after yourself;
+a session that leaves a trial worktree with a full native build behind costs gigabytes.
+
+Where the space goes, measured 2026-09-07:
+
+| path | size | keep? |
+|---|---|---|
+| `src/android/app/.cxx/Debug` | ~5 GB | delete when no debug build is in progress; regenerates on the next `assembleDebug` |
+| `src/android/app/.cxx/RelWithDebInfo` | ~2 GB | keep: incremental release builds and the unstripped `.so` used for symbolication |
+| `src/android/app/build` | ~1 GB | keep: release APK and intermediates |
+| `dependencies/vcpkg/buildtrees`, `packages` | ~2 GB | delete: vcpkg intermediates, rebuilt on demand from the binary cache |
+| `dependencies/vcpkg/downloads` | varies | source tarball cache; delete only if space is critical |
+| `%LOCALAPPDATA%\Temp\claude\<project>\<session>` | varies | remove trial worktrees and scratch files when the work is merged; other projects' session directories are not this repo's to delete without checking |
+
+Routine cleanup after a build-and-test session:
+
+```sh
+rm -rf src/android/app/.cxx/Debug dependencies/vcpkg/buildtrees dependencies/vcpkg/packages
+git worktree prune
+```
+
+Do not run `gradlew clean` or delete `RelWithDebInfo` just to tidy up; a from-scratch native
+build is slow and the next A/B needs the unstripped library. Keep screenshots and captures
+out of the repo root (the ones worth keeping go in `docs/screenshots`), and delete APKs pushed
+to `/sdcard/Download` on the device once they are installed.
+
 ## Snapdragon / Adreno Performance Direction
 
 Treat the AYN Thor as the main test device, but avoid hard-coding Thor-only display IDs, panel modes, refresh-rate quirks, model strings, or AYN control-center behavior into core emulator paths. Prefer general Snapdragon 8 Gen 2 / Adreno 740 / Android Vulkan improvements that would also make sense on other Adreno 7xx devices.
@@ -71,36 +100,58 @@ fork is far enough behind that upstream is a standing source of both fixes and s
 Check it before writing anything non-trivial - the odds are good that a cleaner version
 already exists there.
 
-As of 2026-08-20 upstream `main` was **95 commits ahead** of this branch (2026-04-22 to
-2026-08-18) while `sapphire/android-port` and `ssimco/android-port` had nothing new. Do
-not assume the Android forks are current with upstream; they lag.
+The merge-base with upstream is `02383542` (2026-04-18). A full merge is a project rather
+than a routine sync: a trial merge produced 23 conflicts over 205 files, concentrated
+exactly where this fork's identity lives (`VulkanRenderer*` dual-screen, the emulated
+controllers, `GameProfile`, four `CMakeLists.txt` plus `vcpkg.json`). The build-system churn
+comes from upstream's SDL2 to SDL3 migration, a vcpkg bump, wxWidgets 3.3.3 and fmt 12.1,
+all of which Android disables or does not care about. So upstream is taken by
+**cherry-picking in upstream topological order**, not by merging.
 
-A full merge is a project rather than a routine sync. A trial merge produced **23
-conflicts over 205 changed files**, concentrated exactly where this fork's identity lives:
-`VulkanRenderer*` (Android/dual-screen), the emulated controllers (Star Fox gyro work),
-`GameProfile` (the per-game override fields), and four `CMakeLists.txt` plus `vcpkg.json`.
-The build-system churn comes from upstream's SDL2 to SDL3 migration, a vcpkg bump, wxWidgets
-3.3.3 and fmt 12.1 - all of which Android disables or does not care about. Prefer
-**cherry-picking focused series** over merging everything.
+### Sync status as of 2026-09-07
 
-Worth taking, in rough value order:
-- The **Latte/Vulkan performance batch** (~15 commits): shader lookup caching whole sets,
-  incremental state update checking, widened fast draw conditions,
-  `VK_EXT_attachment_feedback_loop`, omitting unused `FragCoordScale`, reworked interval
-  tree for the vertex/uniform cache, skipping zero-size readback barriers.
-- `880d2b3b` Vulkan: make `vertexPipelineStoresAndAtomics` optional - may matter on Turnip.
-- Correctness: rare buffer-cache corruption, shader error-state caching, a texture copy
-  edge case, a crash during title shutdown, an input button-mapping race, and
-  `65a37336` ih264d colour inaccuracy **on aarch64**.
+Upstream `main` was at `cee557d4` (102 commits past the merge-base). `sapphire/android-port`
+and `ssimco/android-port` had nothing new; they lag upstream and should not be assumed
+current. `ssimco/main` simply mirrors upstream `main`.
 
-Already taken: `3a1d2573` "AArch64: Restore code size after processing jumps".
+**Taken (all with `-x` so `git log --grep='cherry picked from'` finds them):** everything
+that touches emulation, Latte/Vulkan, HLE, RPL, audio, h264, PPC assembler, graphic packs,
+and coreinit - 57 commits, including the whole Latte/Vulkan performance batch (shader
+lookup caching whole sets, incremental state update checking, widened fast draw,
+`VK_EXT_attachment_feedback_loop`, unused `FragCoordScale` omission, interval-tree rework,
+zero-size readback barrier skip, optional `vertexPipelineStoresAndAtomics`), the
+GX2CopySurface rework, the ih264d aarch64 colour fix, the input button-mapping race fix,
+the procui shutdown crash fix, the RPL load-order and name normalisation work, the DynLoad
+and `exit()` implementations, and the swkbd refactor (the Android native-input hooks were
+re-expressed inside upstream's new typed functions). The Vulkan-Headers submodule moved to
+`01393c3d` for the feedback-loop extension.
 
-**Also check open PRs**, not just merged commits - several are directly relevant to this
-fork: `#1909` "Add Android port" (SSimco), `#1992` "Add native Windows ARM64 support",
-`#1759` "Vulkan: Rework inter-renderpass barrier code", `#1650` "various improvements &
-cleanup for shader compilation", `#2007` "Latte: mirror small 1D-tiled render targets back
-to guest memory". Upstream PRs are a preview of what will land and are often directly
-adaptable.
+**Deliberately not taken:** the SDL3 migration and vcpkg/wx/fmt bumps, `ENABLE_OPENGL`/
+`ENABLE_VULKAN`/`ENABLE_LIBUSB` build options (the fork already has its own), all wxWidgets
+UI and debugger-window work, macOS/CI/Metal/OpenGL changes, `src/main.cpp` changes, the
+README LLM policy, and `6f6c1299` (compile-time log format checks - it would need every
+fork-local `cemuLog_log` call audited first).
+
+Resolution rules that were used and should be reused: files under `src/gui/wxgui/` are not
+built on Android, so they take upstream's side verbatim to keep the tree in sync; everything
+else is merged by hand, keeping the fork's per-swapchain previous-command-buffer tracking,
+`ActiveSettings`-routed barrier/GX2DrawDone toggles, alignment-safe guest memory access,
+striped atomic locks and `#if BOOST_OS_ANDROID` blocks, re-expressed inside upstream's new
+structure when it moved. `src/gui/wxgui/debugger/AudioDebuggerWindow.cpp` has had conflict
+markers since before this pass; it is not built on Android and was left alone.
+
+### Open upstream PRs worth watching (2026-09-07)
+
+- `#2057` Latte: fix cubemap destination textures in surface copies - a follow-up bug fix to
+  the GX2CopySurface rework this branch now carries. Small; take it when it lands or sooner.
+- `#2051` 16-byte reads in `_quickStochasticHash` so BC2/BC3 RGB changes are detected.
+- `#2047` GX2: sync with the GPU when polling a pending CPU occlusion query (ZombiU).
+- `#2048` FSC: sort merged directory listings by name (ZombiU v32 black screen).
+- `#2007` Latte: mirror small 1D-tiled render targets back to guest memory.
+- `#1759` Vulkan: rework inter-renderpass barrier code (draft, stale since April) and
+  `#1650` shader compilation cleanup (draft, stale) - the barrier rework is the one most
+  relevant to Adreno.
+- `#1909` "Add Android port" (SSimco) and `#1992` native Windows ARM64 support.
 
 ## ARM64 Reference Manuals
 
@@ -288,24 +339,20 @@ Note the F32 case is the common one and is already optimal in structure: the GQR
 usually known at compile time, so the recompiler emits a specialised case rather than the
 multi-way branch.
 
-### Open: half of the guest main thread is in the vdso clock read
+### Resolved: the vdso clock read on the guest main thread
 
 Profiling Star Fox Zero on 2026-08-20 put **23% of all emulator CPU** (and **48% of
-`OSSched[core=1]`**) in `__kernel_clock_gettime`, with 99.8% of those samples on that one
-thread. Samples cluster tightly at vdso offset `0x30c`, which is the `isb`+`mrs CNTVCT_EL0`
-sequence - real code at an extreme call rate, not misattribution.
+`OSSched[core=1]`**) in `__kernel_clock_gettime`. The caller was hard to find because it is
+not a normal hot function: `coreinit::__OSThreadCoreIdle` is the main guest core's idle fiber
+and it never blocked - it spun calling `__OSCheckSystemEvents()` -> `AXOut_update()`, which
+took a `high_resolution_clock::now()` timestamp before its own rate-limit check.
 
-**The caller is not yet identified.** The vdso has no frame pointers and DWARF cannot unwind
-through it. Disassembling the binary shows the only `clock_gettime` call sites are
-`LatteOverlay_RenderNotifications`, `LattePerformanceMonitor_frameEnd`, `fileCache_test`,
-`LatteCP_*`, `nsysnetExport_select`, `mic_updateOnAXFrame`, curl and libusb - none of which
-should be hot on a guest scheduler thread. `coreinit::OSGetTime()` was ruled out by
-disassembly: it compiles to `mrs CNTVCT_EL0` directly, no libc call.
-
-Next step is to interpose or count rather than sample - e.g. a temporary counter around
-suspected call sites, or bisecting by disabling the FPS overlay, the performance monitor,
-and the mic/AX path in turn. Worth chasing: it is by far the largest single item in the
-profile.
+Fixed in two commits on 2026-08-20: `2248a2ec` makes `now_cached()`/`tick_cached()` read
+`CNTVCT_EL0` directly on AArch64 (`__kernel_clock_gettime` went from 25% of CPU to absent),
+and `93897ff6` makes the main core wait on the run-queue semaphore with a 100us timeout
+instead of spinning (total CPU samples -31%, `OSSched[core=1]` 58% -> 26%, framerate
+unchanged). If `__kernel_clock_gettime` reappears in a profile, look for a new caller of
+`std::chrono` clocks on a guest thread rather than re-deriving this.
 
 ## ARM64 Performance Work Derived From RPCS3
 

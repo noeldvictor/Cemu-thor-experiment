@@ -66,7 +66,7 @@ document:
 /proc/cpuinfo                                  # ISA features actually present
 ```
 
-Device-measured topology for the Thor is recorded in `src/xenia/base/thor_topology.h` and in
-CLAUDE.md: cpu0-2 = 3× A510 @2.0 GHz, cpu3-6 = 2× A715 + 2× A710 @2.8 GHz, cpu7 = X3 @3.19 GHz.
+Device-measured topology for the Thor, read from those sysfs paths: cpu0-2 = 3× A510 @2.0 GHz,
+cpu3-6 = 2× A715 + 2× A710 @2.8 GHz, cpu7 = X3 @3.19 GHz.
 Feature set from `/proc/cpuinfo`: `asimddp i8mm bf16 fphp asimdhp atomics lrcpc ilrcpc sha3` —
 **and no SVE**, which is why every SVE idea from the RPCS3 work is N/A here.

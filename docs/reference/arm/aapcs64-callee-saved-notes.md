@@ -3,6 +3,15 @@
 **Source:** Arm IHI 0055, *Procedure Call Standard for the Arm 64-bit Architecture (AAPCS64)*.
 Canonical text: <https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst>
 
+> **Context for this repository.** This note was written against a sibling project (an LLVM-based
+> Xbox 360 recompiler) and its terms - `cpu_backend_llvm_residency_abi`, XenonRecomp, VMX128 - are that
+> project's, not Cemu's. Cemu's AArch64 backend (`src/Cafe/HW/Espresso/Recompiler/BackendAArch64/`) is a
+> hand-written emitter, and this fork decided against an LLVM backend (see AGENTS.md). What still applies
+> here is the ABI itself: the recompiler entry saves `x19..x30` plus the low halves of `v8..v15`
+> (`BackendAArch64.cpp`, `STACK_SIZE = 160`), the guest context, recompiler instance data and memory
+> base live in callee-saved X registers so they survive HLE calls, and Espresso has no VMX so the
+> "zero 128-bit registers survive a call" limit only matters for paired-single values held in NEON.
+
 **Why this file exists:** `docs/reference/arm/` had the Arm ARM and the four Cortex SWOGs, but **not the
 procedure call standard** — and AAPCS64, not the SWOGs, is what decides which registers survive a guest call.
 That is exactly the question `cpu_backend_llvm_residency_abi` (XenonRecomp `non_volatile_as_local`) turns on, so
