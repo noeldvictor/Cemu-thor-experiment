@@ -426,7 +426,7 @@ adb push app/build/outputs/apk/release/app-release.apk /sdcard/Download/cemu-tho
 
 ## AYN Thor Dual Screen
 
-The Thor has two Android displays. During testing, the top/main display appeared as `displayId=0`, and the lower/presentation screen appeared as `displayId=4` with `FLAG_PRESENTATION`.
+The Thor has two Android displays. During testing, the top/main display appeared as `displayId=0`, and the lower/presentation screen appeared as `displayId=4` with `FLAG_PRESENTATION`. `dumpsys display` on 2026-09-07 named them `"Built-in Screen"` (id 0, 1080x1920, type INTERNAL) and `"Screen-2"` (id 4, 1080x1240, type INTERNAL, `FLAG_PRESENTATION`, state ON), so the name-based check in `DisplayUtils.getExternalDisplay()` (inherited from Sapphire's data-storage commit) does not reject the lower panel on this device; it would on a device whose two internal panels share the built-in name.
 
 Keep the Sapphire dual-screen presentation work intact. The PAD screen should be able to render through `PadPresentation` on the external/presentation display, not merely as a second `SurfaceView` inside the main activity. The emulation side menu includes `External PAD screen`, `Swap screens`, and `Rotate external screen left`; PAD visible and external PAD default to enabled for this Thor-focused build.
 
