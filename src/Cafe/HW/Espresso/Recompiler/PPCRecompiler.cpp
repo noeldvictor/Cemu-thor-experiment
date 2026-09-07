@@ -389,6 +389,20 @@ bool PPCRecompiler_makeRecompiledFunctionActive(uint32 initialEntryPoint, PPCFun
 	s_ppcRecompilerState.invalidationRanges.clear();
 	if (isInvalidated)
 	{
+		// The entry points were marked visited when they were queued and nothing else resets
+		// them (invalidateRange only unlinks functions that are already active), so without
+		// this the addresses would stay on the bare-return stub forever and the function would
+		// run interpreted for the rest of the session. Reset them so the next execution
+		// queues the function again against the new code.
+		auto resetIfVisited = [](uint32 ppcAddress)
+		{
+			auto& slot = ppcRecompilerInstanceData->ppcRecompilerDirectJumpTable[ppcAddress / 4];
+			if (slot == PPCRecompiler_leaveRecompilerCode_visited)
+				slot = PPCRecompiler_leaveRecompilerCode_unvisited;
+		};
+		resetIfVisited(initialEntryPoint);
+		for (auto& itr : entryPoints)
+			resetIfVisited(itr.first);
 		s_ppcRecompilerState.recompilerSpinlock.unlock();
 		return false;
 	}
