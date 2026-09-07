@@ -62,6 +62,8 @@ Where the space goes, measured 2026-09-07:
 | `dependencies/vcpkg/buildtrees`, `packages` | ~2 GB | delete: vcpkg intermediates, rebuilt on demand from the binary cache |
 | `dependencies/vcpkg/downloads` | varies | source tarball cache; delete only if space is critical |
 | `%LOCALAPPDATA%\Temp\claude\<project>\<session>` | varies | remove trial worktrees and scratch files when the work is merged; other projects' session directories are not this repo's to delete without checking |
+| `~/.gradle/caches/<version>` | ~12 GB total across 8 Gradle versions | this project uses the version in `src/android/gradle/wrapper/gradle-wrapper.properties`; caches for versions no local project uses can go, but check the other projects on the machine first |
+| `~/.gradle/daemon/<version>/*.log` | grows to ~1 GB | plain daemon logs; `gradlew --stop` then delete them |
 
 Routine cleanup after a build-and-test session:
 
